@@ -14,6 +14,8 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     private const string CacheEntryLifetimeObserverAttributeMetadataName = "hhnl.CascadingCompute.Shared.Attributes.CacheEntryLifetimeObserverAttribute";
     private const string CacheContextProviderInterfaceNamespace = "hhnl.CascadingCompute.Shared.Interfaces";
     private const string CacheContextProviderInterfaceName = "ICacheContextProvider";
+    private const string IgnoreParameterAttributeMetadataName = "hhnl.CascadingCompute.Attributes.CascadingComputeIgnoreParameterAttribute";
+    private const string IgnoreAttributeMetadataName = "hhnl.CascadingCompute.Attributes.CascadingComputeIgnoreAttribute";
 
     private static readonly DiagnosticDescriptor ClassMustBePartial = new(
         "CCG001",
@@ -285,7 +287,8 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         var cacheFields = new List<string>();
         foreach (var method in methods)
         {
-            var cacheKeyType = GetCacheKeyType(method);
+            var includedParameters = GetIncludedParameters(method);
+            var cacheKeyType = GetCacheKeyType(method, includedParameters);
             var fieldName = GetCacheFieldName(method);
             cacheFields.Add(fieldName);
 
@@ -322,7 +325,10 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.AppendLine();
 
             var parameters = GetParameterList(method);
-            var cacheKeyExpression = GetCacheKeyExpression(method);
+            var invalidateParameters = GetParameterList(includedParameters);
+            var cacheKeyExpression = GetCacheKeyExpression(method, includedParameters);
+            var invocationArguments = GetInvocationArguments(method, includedParameters);
+            var useStaticFactory = includedParameters.Count == method.Parameters.Length;
             var methodAccessibility = GetAccessibility(method.DeclaredAccessibility);
             var methodTypeParameters = GetMethodTypeParameters(method);
             var methodConstraints = GetMethodConstraints(method);
@@ -357,14 +363,17 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(fieldName);
             sb.Append(".GetOrAdd(implementation, ");
             sb.Append(cacheKeyExpression);
-            sb.Append(", static (s, p) => ");
+            sb.Append(", ");
+            if (useStaticFactory)
+                sb.Append("static ");
+            sb.Append("(s, p) => ");
             if (method.IsGenericMethod)
                 sb.Append("(object)");
             sb.Append("s.");
             sb.Append(method.Name);
             sb.Append(invocationTypeArguments);
             sb.Append('(');
-            sb.Append(GetInvocationArguments(method));
+            sb.Append(invocationArguments);
             sb.Append("), ");
             sb.Append(observerFieldName);
             sb.AppendLine(");");
@@ -378,7 +387,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(method.Name);
             sb.Append(methodTypeParameters);
             sb.Append('(');
-            sb.Append(parameters);
+            sb.Append(invalidateParameters);
             sb.AppendLine(")");
             foreach (var constraint in methodConstraints)
             {
@@ -432,13 +441,14 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
-    private static string GetInvocationArguments(IMethodSymbol method)
+    private static string GetInvocationArguments(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters)
     {
         if (method.Parameters.Length == 0)
             return string.Empty;
 
-        var usesTuple = GetCacheKeyElementCount(method) > 1;
-        return string.Join(", ", method.Parameters.Select(parameter => GetInvocationArgument(method, parameter, usesTuple)));
+        var includedParameterNames = new HashSet<string>(includedParameters.Select(parameter => parameter.Name), StringComparer.Ordinal);
+        var usesTuple = GetCacheKeyElementCount(method, includedParameters) > 1;
+        return string.Join(", ", method.Parameters.Select(parameter => GetInvocationArgument(method, parameter, usesTuple, includedParameterNames.Contains(parameter.Name))));
     }
 
     private static string GetParameterTupleExpression(IReadOnlyList<string> elements)
@@ -457,9 +467,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         return $"({string.Join(", ", elements)})";
     }
 
-    private static string GetCacheKeyExpression(IMethodSymbol method)
+    private static string GetCacheKeyExpression(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters)
     {
-        var elements = GetCacheKeyExpressionElements(method).ToList();
+        var elements = GetCacheKeyExpressionElements(method, includedParameters).ToList();
         if (elements.Count == 0)
             return "default";
         if (elements.Count == 1)
@@ -468,24 +478,24 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         return GetParameterTupleExpression(elements);
     }
 
-    private static string GetCacheKeyType(IMethodSymbol method)
+    private static string GetCacheKeyType(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters)
     {
-        var elementTypes = GetCacheKeyTypeElements(method, includeNames: false).ToList();
+        var elementTypes = GetCacheKeyTypeElements(method, includedParameters, includeNames: false).ToList();
         if (elementTypes.Count == 0)
             return "global::System.ValueTuple";
         if (elementTypes.Count == 1)
             return elementTypes[0];
 
-        var namedElements = GetCacheKeyTypeElements(method, includeNames: true).ToList();
+        var namedElements = GetCacheKeyTypeElements(method, includedParameters, includeNames: true).ToList();
         return GetParameterTupleType(namedElements);
     }
 
-    private static IEnumerable<string> GetCacheKeyExpressionElements(IMethodSymbol method)
+    private static IEnumerable<string> GetCacheKeyExpressionElements(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters)
     {
         foreach (var typeSymbol in GetGenericMethodTypeSymbols(method))
             yield return $"typeof({typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})";
 
-        foreach (var parameter in method.Parameters)
+        foreach (var parameter in includedParameters)
         {
             if (ContainsMethodTypeParameter(parameter.Type, method))
                 yield return $"(object){EscapeIdentifier(parameter.Name)}";
@@ -497,12 +507,12 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             yield return cacheContextElement.Expression;
     }
 
-    private static IEnumerable<string> GetCacheKeyTypeElements(IMethodSymbol method, bool includeNames)
+    private static IEnumerable<string> GetCacheKeyTypeElements(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters, bool includeNames)
     {
         foreach (var _ in GetGenericMethodTypeSymbols(method))
             yield return "global::System.Type";
 
-        foreach (var parameter in method.Parameters)
+        foreach (var parameter in includedParameters)
         {
             var typeName = ContainsMethodTypeParameter(parameter.Type, method)
                 ? "global::System.Object"
@@ -522,11 +532,14 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         }
     }
 
-    private static int GetCacheKeyElementCount(IMethodSymbol method)
-        => method.TypeParameters.Length + method.Parameters.Length + GetCacheContextElements(method).Count;
+    private static int GetCacheKeyElementCount(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters)
+        => method.TypeParameters.Length + includedParameters.Count + GetCacheContextElements(method).Count;
 
-    private static string GetInvocationArgument(IMethodSymbol method, IParameterSymbol parameter, bool usesTuple)
+    private static string GetInvocationArgument(IMethodSymbol method, IParameterSymbol parameter, bool usesTuple, bool isIncludedInCacheKey)
     {
+        if (!isIncludedInCacheKey)
+            return EscapeIdentifier(parameter.Name);
+
         var expression = usesTuple ? $"p.{EscapeIdentifier(parameter.Name)}" : "p";
         if (method.IsGenericMethod || ContainsMethodTypeParameter(parameter.Type, method))
         {
@@ -619,6 +632,173 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             && typeSymbol.ContainingNamespace.ToDisplayString() == CacheContextProviderInterfaceNamespace;
 
     private sealed record CacheContextElement(string Name, string Expression, string TypeName);
+
+    private static IReadOnlyList<IParameterSymbol> GetIncludedParameters(IMethodSymbol method)
+    {
+        var ignoredParameterNames = GetIgnoredParameterNames(method);
+        if (ignoredParameterNames.Count == 0)
+            return method.Parameters;
+
+        return method.Parameters
+            .Where(parameter => !ignoredParameterNames.Contains(parameter.Name))
+            .ToList();
+    }
+
+    private static HashSet<string> GetIgnoredParameterNames(IMethodSymbol method)
+    {
+        var ignoredParameterNames = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var parameter in method.Parameters)
+        {
+            foreach (var attribute in parameter.GetAttributes())
+                ApplyIgnoreAttribute(attribute, method, ignoredParameterNames, parameter);
+        }
+
+        foreach (var interfaceMethod in method.ExplicitInterfaceImplementations)
+            ApplyInterfaceParameterIgnores(method, interfaceMethod, ignoredParameterNames);
+
+        var containingType = method.ContainingType;
+        foreach (var interfaceSymbol in containingType.AllInterfaces)
+        {
+            foreach (var interfaceMember in interfaceSymbol.GetMembers(method.Name).OfType<IMethodSymbol>())
+            {
+                if (!SymbolEqualityComparer.Default.Equals(containingType.FindImplementationForInterfaceMember(interfaceMember), method))
+                    continue;
+
+                ApplyInterfaceParameterIgnores(method, interfaceMember, ignoredParameterNames);
+            }
+        }
+
+        foreach (var attribute in CollectIgnoreAttributes(method))
+            ApplyIgnoreAttribute(attribute, method, ignoredParameterNames, parameter: null);
+
+        return ignoredParameterNames;
+    }
+
+    private static void ApplyInterfaceParameterIgnores(IMethodSymbol method, IMethodSymbol interfaceMethod, HashSet<string> ignoredParameterNames)
+    {
+        var parameterCount = Math.Min(method.Parameters.Length, interfaceMethod.Parameters.Length);
+        for (var index = 0; index < parameterCount; index++)
+        {
+            var methodParameter = method.Parameters[index];
+            var interfaceParameter = interfaceMethod.Parameters[index];
+            foreach (var attribute in interfaceParameter.GetAttributes())
+                ApplyIgnoreAttribute(attribute, method, ignoredParameterNames, methodParameter);
+        }
+    }
+
+    private static IEnumerable<AttributeData> CollectIgnoreAttributes(IMethodSymbol method)
+    {
+        foreach (var attribute in method.GetAttributes())
+            yield return attribute;
+
+        foreach (var attribute in method.OriginalDefinition.GetAttributes())
+            yield return attribute;
+
+        foreach (var interfaceMethod in method.ExplicitInterfaceImplementations)
+        {
+            foreach (var attribute in interfaceMethod.GetAttributes())
+                yield return attribute;
+        }
+
+        var containingType = method.ContainingType;
+        foreach (var interfaceSymbol in containingType.AllInterfaces)
+        {
+            foreach (var interfaceAttribute in interfaceSymbol.GetAttributes())
+                yield return interfaceAttribute;
+
+            foreach (var interfaceMember in interfaceSymbol.GetMembers(method.Name).OfType<IMethodSymbol>())
+            {
+                if (!SymbolEqualityComparer.Default.Equals(containingType.FindImplementationForInterfaceMember(interfaceMember), method))
+                    continue;
+
+                foreach (var attribute in interfaceMember.GetAttributes())
+                    yield return attribute;
+            }
+        }
+
+        foreach (var typeAttribute in containingType.GetAttributes())
+            yield return typeAttribute;
+
+        foreach (var assemblyAttribute in method.ContainingAssembly.GetAttributes())
+            yield return assemblyAttribute;
+    }
+
+    private static void ApplyIgnoreAttribute(AttributeData attribute, IMethodSymbol method, HashSet<string> ignoredParameterNames, IParameterSymbol? parameter)
+    {
+        if (IsIgnoreAttribute(attribute))
+        {
+            if (parameter is not null)
+                ignoredParameterNames.Add(parameter.Name);
+
+            return;
+        }
+
+        if (!IsIgnoreParameterAttribute(attribute))
+            return;
+
+        var rule = GetIgnoreRule(attribute);
+        if (!rule.HasFilter && parameter is not null)
+        {
+            ignoredParameterNames.Add(parameter.Name);
+            return;
+        }
+
+        foreach (var methodParameter in method.Parameters)
+        {
+            if (MatchesIgnoreRule(methodParameter, rule))
+                ignoredParameterNames.Add(methodParameter.Name);
+        }
+    }
+
+    private static IgnoreRule GetIgnoreRule(AttributeData attribute)
+    {
+        ITypeSymbol? typeFilter = null;
+        string? nameFilter = null;
+
+        foreach (var constructorArgument in attribute.ConstructorArguments)
+        {
+            if (constructorArgument.Kind == TypedConstantKind.Type && constructorArgument.Value is ITypeSymbol typeSymbol)
+                typeFilter = typeSymbol;
+            else if (constructorArgument.Kind == TypedConstantKind.Primitive && constructorArgument.Value is string parameterName)
+                nameFilter = parameterName;
+        }
+
+        foreach (var namedArgument in attribute.NamedArguments)
+        {
+            if (namedArgument is { Key: "Type", Value.Kind: TypedConstantKind.Type } && namedArgument.Value.Value is ITypeSymbol typeSymbol)
+                typeFilter = typeSymbol;
+            else if (namedArgument is { Key: "ParameterName", Value.Kind: TypedConstantKind.Primitive } && namedArgument.Value.Value is string parameterName)
+                nameFilter = parameterName;
+        }
+
+        return new IgnoreRule(typeFilter, nameFilter, typeFilter is not null || !string.IsNullOrEmpty(nameFilter));
+    }
+
+    private static bool MatchesIgnoreRule(IParameterSymbol parameter, IgnoreRule rule)
+    {
+        if (!rule.HasFilter)
+            return true;
+
+        if (rule.NameFilter is not null && !string.Equals(parameter.Name, rule.NameFilter, StringComparison.Ordinal))
+            return false;
+
+        if (rule.TypeFilter is null)
+            return true;
+
+        return SymbolEqualityComparer.Default.Equals(parameter.Type, rule.TypeFilter)
+               || parameter.Type is INamedTypeSymbol parameterNamedType
+                   && rule.TypeFilter is INamedTypeSymbol ruleNamedType
+                   && SymbolEqualityComparer.Default.Equals(parameterNamedType.OriginalDefinition, ruleNamedType.OriginalDefinition);
+    }
+
+    private static bool IsIgnoreAttribute(AttributeData attribute)
+        => attribute.AttributeClass?.ToDisplayString() == IgnoreAttributeMetadataName;
+
+    private static bool IsIgnoreParameterAttribute(AttributeData attribute)
+        => attribute.AttributeClass?.ToDisplayString() == IgnoreParameterAttributeMetadataName;
+
+    private sealed record IgnoreRule(ITypeSymbol? TypeFilter, string? NameFilter, bool HasFilter);
 
     private static IReadOnlyList<AttributeData> GetCacheEntryLifetimeObserverAttributes(IMethodSymbol method)
     {
@@ -752,10 +932,15 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
     private static string GetParameterList(IMethodSymbol method)
     {
-        if (method.Parameters.Length == 0)
+        return GetParameterList(method.Parameters);
+    }
+
+    private static string GetParameterList(IReadOnlyList<IParameterSymbol> parameters)
+    {
+        if (parameters.Count == 0)
             return string.Empty;
 
-        return string.Join(", ", method.Parameters.Select(parameter =>
+        return string.Join(", ", parameters.Select(parameter =>
         {
             var modifier = parameter.IsParams ? "params " : string.Empty;
             var typeName = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -1039,6 +1224,8 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         foreach (var method in interfaceMethods)
         {
             var parameters = GetParameterList(method);
+            var includedParameters = GetIncludedParameters(method);
+            var invalidateParameters = GetParameterList(includedParameters);
             var methodTypeParameters = GetMethodTypeParameters(method);
             var methodConstraints = GetMethodConstraints(method);
             sb.Append(memberIndent);
@@ -1063,7 +1250,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(method.Name);
             sb.Append(methodTypeParameters);
             sb.Append('(');
-            sb.Append(parameters);
+            sb.Append(invalidateParameters);
             sb.AppendLine(")");
             foreach (var constraint in methodConstraints)
             {
