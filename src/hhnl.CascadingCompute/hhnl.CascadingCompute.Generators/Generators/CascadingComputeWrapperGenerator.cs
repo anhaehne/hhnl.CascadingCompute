@@ -28,6 +28,24 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor InterfaceMustBePartial = new(
+        "CCG003",
+        "Cascading compute wrapper requires partial interface",
+        "Interface '{0}' must be declared partial to generate CascadingCompute wrappers",
+        "CascadingCompute",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor MultipleCascadingInterfacesNotSupported = new(
+        "CCG004",
+        "Multiple cascading compute interfaces not supported",
+        "Class '{0}' implements multiple interfaces with cascading compute methods; only one is supported",
+        "CascadingCompute",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    private static readonly IEqualityComparer<INamedTypeSymbol> NamedTypeSymbolComparer = new NamedTypeSymbolEqualityComparer();
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var methods = context.SyntaxProvider.ForAttributeWithMetadataName(
@@ -35,36 +53,42 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             static (node, _) => node is MethodDeclarationSyntax,
             static (ctx, _) => (IMethodSymbol)ctx.TargetSymbol);
 
-        context.RegisterSourceOutput(methods.Collect(), static (spc, methodSymbols) => Execute(spc, methodSymbols));
+        var classes = context.SyntaxProvider.CreateSyntaxProvider(
+                static (node, _) => node is ClassDeclarationSyntax,
+                static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol((ClassDeclarationSyntax)ctx.Node) as INamedTypeSymbol)
+            .Where(static symbol => symbol is not null)!
+            .Select(static (symbol, _) => symbol!);
+
+        context.RegisterSourceOutput(methods.Collect().Combine(classes.Collect()), static (spc, data) => Execute(spc, data.Left, data.Right));
     }
 
-    private static void Execute(SourceProductionContext context, ImmutableArray<IMethodSymbol> methods)
+    private static void Execute(SourceProductionContext context, ImmutableArray<IMethodSymbol> methods, ImmutableArray<INamedTypeSymbol> classes)
     {
         if (methods.IsDefaultOrEmpty)
             return;
 
-        var methodsByType = methods
-            .Where(method => method.ContainingType is { TypeKind: TypeKind.Class })
-            .GroupBy<IMethodSymbol, INamedTypeSymbol>(method => method.ContainingType, SymbolEqualityComparer.Default);
+        var interfaceMethodsByType = methods
+            .Where(method => method.ContainingType is { TypeKind: TypeKind.Interface })
+            .GroupBy<IMethodSymbol, INamedTypeSymbol>(method => method.ContainingType, NamedTypeSymbolComparer)
+            .ToDictionary(group => group.Key, group => group.ToList(), NamedTypeSymbolComparer);
 
-        foreach (var group in methodsByType)
+        var validInterfaces = new Dictionary<INamedTypeSymbol, List<IMethodSymbol>>(NamedTypeSymbolComparer);
+        foreach (var kvp in interfaceMethodsByType)
         {
-            var typeSymbol = group.Key;
-            if (HasWrapper(typeSymbol))
-                continue;
-
-            if (!IsPartial(typeSymbol, out var nonPartialLocation))
+            var interfaceSymbol = kvp.Key;
+            var interfaceMethods = kvp.Value;
+            if (!IsPartial(interfaceSymbol, out var nonPartialLocation))
             {
-                context.ReportDiagnostic(Diagnostic.Create(ClassMustBePartial, nonPartialLocation, typeSymbol.ToDisplayString()));
+                context.ReportDiagnostic(Diagnostic.Create(InterfaceMustBePartial, nonPartialLocation, interfaceSymbol.ToDisplayString()));
                 continue;
             }
 
-            var supportedMethods = new List<IMethodSymbol>();
-            foreach (var method in group)
+            var supportedInterfaceMethods = new List<IMethodSymbol>();
+            foreach (var method in interfaceMethods)
             {
                 if (IsSupportedMethod(method))
                 {
-                    supportedMethods.Add(method);
+                    supportedInterfaceMethods.Add(method);
                 }
                 else
                 {
@@ -72,11 +96,78 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
                 }
             }
 
-            if (supportedMethods.Count == 0)
+            if (supportedInterfaceMethods.Count == 0)
                 continue;
 
-            var source = GenerateWrapperSource(typeSymbol, supportedMethods, HasCascadingComputeProperty(typeSymbol));
-            context.AddSource(GetHintName(typeSymbol), SourceText.From(source, Encoding.UTF8));
+            validInterfaces[interfaceSymbol] = supportedInterfaceMethods;
+
+            if (!HasCascadingComputeProperty(interfaceSymbol))
+            {
+                var interfaceSource = GenerateInterfaceSource(interfaceSymbol, supportedInterfaceMethods);
+                context.AddSource(GetInterfaceHintName(interfaceSymbol), SourceText.From(interfaceSource, Encoding.UTF8));
+            }
+        }
+
+        var classMethodsByType = methods
+            .Where(method => method.ContainingType is { TypeKind: TypeKind.Class })
+            .GroupBy<IMethodSymbol, INamedTypeSymbol>(method => method.ContainingType, NamedTypeSymbolComparer)
+            .ToDictionary(group => group.Key, group => group.ToList(), NamedTypeSymbolComparer);
+
+        var distinctClasses = classes.Distinct(NamedTypeSymbolComparer).ToArray();
+        foreach (var classSymbol in distinctClasses)
+        {
+            classMethodsByType.TryGetValue(classSymbol, out var classMethods);
+            classMethods ??= [];
+
+            var interfaceTypes = classSymbol.AllInterfaces
+                .Where(interfaceSymbol => validInterfaces.ContainsKey(interfaceSymbol))
+                .ToArray();
+
+            if (classMethods.Count == 0 && interfaceTypes.Length == 0)
+                continue;
+
+            if (HasWrapper(classSymbol))
+                continue;
+
+            if (!IsPartial(classSymbol, out var nonPartialLocation))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(ClassMustBePartial, nonPartialLocation, classSymbol.ToDisplayString()));
+                continue;
+            }
+
+            var methodSet = new HashSet<IMethodSymbol>(SymbolEqualityComparer.Default);
+            foreach (var method in classMethods)
+            {
+                if (IsSupportedMethod(method))
+                {
+                    methodSet.Add(method);
+                }
+                else
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(UnsupportedMethod, method.Locations.FirstOrDefault(), method.ToDisplayString()));
+                }
+            }
+
+            foreach (var interfaceSymbol in interfaceTypes)
+            {
+                foreach (var interfaceMethod in validInterfaces[interfaceSymbol])
+                {
+                    if (classSymbol.FindImplementationForInterfaceMember(interfaceMethod) is IMethodSymbol implementation)
+                        methodSet.Add(implementation);
+                }
+            }
+
+            if (methodSet.Count == 0)
+                continue;
+
+            INamedTypeSymbol? wrapperInterface = null;
+            if (interfaceTypes.Length > 1)
+                context.ReportDiagnostic(Diagnostic.Create(MultipleCascadingInterfacesNotSupported, classSymbol.Locations.FirstOrDefault(), classSymbol.ToDisplayString()));
+            if (interfaceTypes.Length > 0)
+                wrapperInterface = interfaceTypes[0];
+
+            var source = GenerateWrapperSource(classSymbol, methodSet, HasCascadingComputeProperty(classSymbol), wrapperInterface);
+            context.AddSource(GetHintName(classSymbol), SourceText.From(source, Encoding.UTF8));
         }
     }
 
@@ -116,7 +207,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         return true;
     }
 
-    private static string GenerateWrapperSource(INamedTypeSymbol typeSymbol, IEnumerable<IMethodSymbol> methods, bool hasProperty)
+    private static string GenerateWrapperSource(INamedTypeSymbol typeSymbol, IEnumerable<IMethodSymbol> methods, bool hasProperty, INamedTypeSymbol? interfaceSymbol)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -158,14 +249,29 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         if (!hasProperty)
         {
             sb.Append(indent);
-            sb.AppendLine("public CascadingComputeWrapper CascadingCompute => field ??= new CascadingComputeWrapper(this);");
+            if (interfaceSymbol is null)
+            {
+                sb.AppendLine("public CascadingComputeWrapper CascadingCompute => field ??= new CascadingComputeWrapper(this);");
+            }
+            else
+            {
+                sb.Append("public ");
+                sb.Append(GetWrapperInterfaceTypeName(interfaceSymbol));
+                sb.AppendLine(" CascadingCompute => field ??= new CascadingComputeWrapper(this);");
+            }
             sb.AppendLine();
         }
 
         sb.Append(indent);
         sb.Append("public class CascadingComputeWrapper(");
         sb.Append(GetContainingTypeName(typeSymbol));
-        sb.AppendLine(" implementation)");
+        sb.Append(" implementation)");
+        if (interfaceSymbol is not null)
+        {
+            sb.Append(" : ");
+            sb.Append(GetWrapperInterfaceTypeName(interfaceSymbol));
+        }
+        sb.AppendLine();
         sb.Append(indent);
         sb.AppendLine("{");
 
@@ -347,7 +453,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         };
 
     private static string GetTypeKeyword(INamedTypeSymbol typeSymbol)
-        => typeSymbol.IsRecord ? "record" : "class";
+        => typeSymbol.TypeKind == TypeKind.Interface ? "interface" : typeSymbol.IsRecord ? "record" : "class";
 
     private static string GetTypeParameters(INamedTypeSymbol typeSymbol)
     {
@@ -458,5 +564,173 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         }
 
         return count;
+    }
+
+    private static string GenerateInterfaceSource(INamedTypeSymbol interfaceSymbol, IReadOnlyList<IMethodSymbol> interfaceMethods)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("#nullable enable");
+
+        if (!interfaceSymbol.ContainingNamespace.IsGlobalNamespace)
+        {
+            sb.Append("namespace ");
+            sb.AppendLine(interfaceSymbol.ContainingNamespace.ToDisplayString());
+            sb.AppendLine("{");
+        }
+
+        var indent = string.Empty;
+        var containingTypes = GetContainingTypes(interfaceSymbol).ToList();
+        for (var index = 0; index < containingTypes.Count - 1; index++)
+        {
+            var containingType = containingTypes[index];
+            sb.Append(indent);
+            sb.Append(GetAccessibility(containingType.DeclaredAccessibility));
+            sb.Append(" partial ");
+            sb.Append(GetTypeKeyword(containingType));
+            sb.Append(' ');
+            sb.Append(containingType.Name);
+            sb.Append(GetTypeParameters(containingType));
+            sb.AppendLine();
+            var constraints = GetTypeConstraints(containingType);
+            if (constraints.Count > 0)
+            {
+                foreach (var constraint in constraints)
+                {
+                    sb.Append(indent);
+                    sb.Append("    ");
+                    sb.AppendLine(constraint);
+                }
+            }
+            sb.Append(indent);
+            sb.AppendLine("{");
+            indent += "    ";
+        }
+
+        sb.Append(indent);
+        sb.Append(GetAccessibility(interfaceSymbol.DeclaredAccessibility));
+        sb.Append(" partial interface ");
+        sb.Append(interfaceSymbol.Name);
+        sb.Append(GetTypeParameters(interfaceSymbol));
+        sb.AppendLine();
+        var interfaceConstraints = GetTypeConstraints(interfaceSymbol);
+        if (interfaceConstraints.Count > 0)
+        {
+            foreach (var constraint in interfaceConstraints)
+            {
+                sb.Append(indent);
+                sb.Append("    ");
+                sb.AppendLine(constraint);
+            }
+        }
+        sb.Append(indent);
+        sb.AppendLine("{");
+
+        var interfaceIndent = indent + "    ";
+        var wrapperInterfaceName = GetWrapperInterfaceName(interfaceSymbol);
+        sb.Append(interfaceIndent);
+        sb.Append(wrapperInterfaceName);
+        sb.AppendLine(" CascadingCompute { get; }");
+        sb.AppendLine();
+        sb.Append(interfaceIndent);
+        sb.Append("interface ");
+        sb.Append(wrapperInterfaceName);
+        sb.AppendLine();
+        sb.Append(interfaceIndent);
+        sb.AppendLine("{");
+
+        var memberIndent = interfaceIndent + "    ";
+        foreach (var method in interfaceMethods)
+        {
+            var parameters = GetParameterList(method);
+            sb.Append(memberIndent);
+            sb.Append(method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+            sb.Append(' ');
+            sb.Append(method.Name);
+            sb.Append('(');
+            sb.Append(parameters);
+            sb.AppendLine(");");
+
+            sb.Append(memberIndent);
+            sb.Append("void Invalidate");
+            sb.Append(method.Name);
+            sb.Append('(');
+            sb.Append(parameters);
+            sb.AppendLine(");");
+            sb.AppendLine();
+        }
+
+        sb.Append(memberIndent);
+        sb.AppendLine("void InvalidateAll();");
+        sb.Append(interfaceIndent);
+        sb.AppendLine("}");
+        sb.Append(indent);
+        sb.AppendLine("}");
+
+        for (var i = 0; i < containingTypes.Count - 1; i++)
+        {
+            indent = indent.Length >= 4 ? indent.Substring(0, indent.Length - 4) : string.Empty;
+            sb.Append(indent);
+            sb.AppendLine("}");
+        }
+
+        if (!interfaceSymbol.ContainingNamespace.IsGlobalNamespace)
+        {
+            sb.AppendLine("}");
+        }
+
+        return sb.ToString();
+    }
+
+    private static string GetInterfaceHintName(INamedTypeSymbol interfaceSymbol)
+    {
+        var name = interfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            .Replace("global::", string.Empty)
+            .Replace('<', '_')
+            .Replace('>', '_')
+            .Replace('.', '_');
+        return $"{name}.CascadingComputeInterface.g.cs";
+    }
+
+    private static string GetWrapperInterfaceName(INamedTypeSymbol interfaceSymbol)
+        => "CascadingComputeWrapper";
+
+    private static string GetWrapperInterfaceTypeName(INamedTypeSymbol interfaceSymbol)
+    {
+        var typeName = interfaceSymbol.Name + GetTypeParameters(interfaceSymbol) + "." + GetWrapperInterfaceName(interfaceSymbol);
+        var builder = new StringBuilder("global::");
+
+        if (!interfaceSymbol.ContainingNamespace.IsGlobalNamespace)
+        {
+            builder.Append(interfaceSymbol.ContainingNamespace.ToDisplayString());
+            builder.Append('.');
+        }
+
+        var containingTypes = new Stack<INamedTypeSymbol>();
+        var current = interfaceSymbol.ContainingType;
+        while (current is not null)
+        {
+            containingTypes.Push(current);
+            current = current.ContainingType;
+        }
+
+        foreach (var containingType in containingTypes)
+        {
+            builder.Append(containingType.Name);
+            builder.Append(GetTypeParameters(containingType));
+            builder.Append('.');
+        }
+
+        builder.Append(typeName);
+        return builder.ToString();
+    }
+
+    private sealed class NamedTypeSymbolEqualityComparer : IEqualityComparer<INamedTypeSymbol>
+    {
+        public bool Equals(INamedTypeSymbol? x, INamedTypeSymbol? y)
+            => SymbolEqualityComparer.Default.Equals(x, y);
+
+        public int GetHashCode(INamedTypeSymbol obj)
+            => SymbolEqualityComparer.Default.GetHashCode(obj);
     }
 }

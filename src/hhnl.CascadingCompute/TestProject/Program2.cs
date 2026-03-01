@@ -12,7 +12,7 @@ class TestProgram2
         var result = serviceOuter.AddTwice(1, 2);
         var result2 = serviceOuter.AddTwice(1, 2);
 
-        serviceInner.CascadingCompute.InvalidateAdd(1, 2);
+        serviceInner.InvalidateAdd(1, 2);
 
         var result3 = serviceOuter.AddTwice(1, 2);
 
@@ -21,7 +21,7 @@ class TestProgram2
     }
 }
 
-public partial class ServiceOuter(ServiceInner serviceInner)
+public partial class ServiceOuter(IServiceInner serviceInner)
 {
     [CascadingCompute]
     public int AddTwice(int a, int b)
@@ -33,12 +33,23 @@ public partial class ServiceOuter(ServiceInner serviceInner)
     }
 }
 
-public partial class ServiceInner
+public partial interface IServiceInner
 {
-    [CascadingCompute(autoInvalidateInMilliseconds: 100)]
+    [CascadingCompute]
+    int Add(int a, int b);
+
+    void InvalidateAdd(int a, int b);
+}
+
+public partial class ServiceInner : IServiceInner
+{
+    [CascadingCompute]
     public int Add(int a, int b)
     {
         Console.WriteLine($"Calculating {a} + {b}");
         return a + b;
     }
+
+    public void InvalidateAdd(int a, int b)
+        => CascadingCompute.InvalidateAdd(a, b);
 }
