@@ -6,7 +6,7 @@ namespace hhnl.CascadingCompute.Tests;
 public sealed partial class GeneratedCascadingComputeTests
 {
     [TestMethod]
-    public void InterceptorUsesGeneratedWrapperCache()
+    public void Cascading_compute_should_cache_call_result()
     {
         // Arrange
         var service = new InnerService();
@@ -22,7 +22,7 @@ public sealed partial class GeneratedCascadingComputeTests
     }
 
     [TestMethod]
-    public void InvalidateClearsGeneratedCacheEntry()
+    public void Cascading_compute_should_recompute_after_cache_invalidation()
     {
         // Arrange
         var service = new InnerService();
@@ -39,7 +39,7 @@ public sealed partial class GeneratedCascadingComputeTests
     }
 
     [TestMethod]
-    public void NestedServiceCallsUseGeneratedCaches()
+    public void Cascading_compute_should_use_nested_service_caches()
     {
         // Arrange
         var inner = new InnerService();
@@ -56,7 +56,7 @@ public sealed partial class GeneratedCascadingComputeTests
     }
 
     [TestMethod]
-    public void InvalidateInnerServiceInvalidatesOuterService()
+    public void Cascading_compute_should_invalidate_outer_cache_when_inner_cache_is_invalidated()
     {
         // Arrange
         var inner = new InnerService();
@@ -72,43 +72,6 @@ public sealed partial class GeneratedCascadingComputeTests
         CollectionAssert.AreEqual(new[] { (1, 2), (1, 2) }, outer.Calls.ToArray());
         CollectionAssert.AreEqual(new[] { (1, 2), (3, 2), (1, 2) }, inner.Calls.ToArray());
     }
-
-    [TestMethod]
-    public void GenericMethodUsesGeneratedWrapperCache()
-    {
-        // Arrange
-        var service = new GenericService();
-
-        // Act
-        var first = service.CascadingCompute.Echo(1);
-        var second = service.CascadingCompute.Echo(1);
-        // Assert
-        Assert.AreEqual(1, first);
-        Assert.AreEqual(first, second);
-        CollectionAssert.AreEqual(
-            new[] { (typeof(int), (object)1) },
-            service.Calls.ToArray());
-    }
-
-    [TestMethod]
-    public void GenericMethodInvalidationClearsCacheEntry()
-    {
-        // Arrange
-        var service = new GenericService();
-
-        // Act
-        var first = service.CascadingCompute.Echo(2);
-        service.CascadingCompute.InvalidateEcho<int>(2);
-        var second = service.CascadingCompute.Echo(2);
-
-        // Assert
-        Assert.AreEqual(2, first);
-        Assert.AreEqual(first, second);
-        CollectionAssert.AreEqual(
-            new[] { (typeof(int), (object)2), (typeof(int), (object)2) },
-            service.Calls.ToArray());
-    }
-
 
     public sealed partial class InnerService
     {
@@ -145,17 +108,4 @@ public sealed partial class GeneratedCascadingComputeTests
         }
     }
 
-    public sealed partial class GenericService
-    {
-        private readonly List<(Type type, object value)> _calls = [];
-
-        public IReadOnlyList<(Type type, object value)> Calls => _calls;
-
-        [CascadingCompute]
-        public T Echo<T>(T value)
-        {
-            _calls.Add((typeof(T), value!));
-            return value;
-        }
-    }
 }

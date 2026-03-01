@@ -6,7 +6,7 @@ namespace hhnl.CascadingCompute.Tests;
 public sealed partial class GeneratedCascadingComputeInterfaceTests
 {
     [TestMethod]
-    public void InterfaceCallUsesGeneratedWrapperCache()
+    public void Cascading_compute_should_cache_interface_call_result()
     {
         // Arrange
         var inner = new InterfaceInner();
@@ -23,7 +23,7 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     }
 
     [TestMethod]
-    public void InterfaceInvalidationClearsCacheEntry()
+    public void Cascading_compute_should_recompute_interface_call_after_cache_invalidation()
     {
         // Arrange
         var inner = new InterfaceInner();
@@ -41,7 +41,7 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     }
 
     [TestMethod]
-    public void InterfaceNestedServiceCallsUseGeneratedCaches()
+    public void Cascading_compute_should_use_nested_interface_service_caches()
     {
         // Arrange
         var inner = new InterfaceInner();
@@ -58,7 +58,7 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     }
 
     [TestMethod]
-    public void InterfaceInvalidatingInnerInvalidatesOuter()
+    public void Cascading_compute_should_invalidate_outer_interface_cache_when_inner_cache_is_invalidated()
     {
         // Arrange
         var inner = new InterfaceInner();
@@ -76,7 +76,7 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     }
 
     [TestMethod]
-    public void InterfaceGenericMethodUsesGeneratedWrapperCache()
+    public void Cascading_compute_should_cache_generic_interface_call_result()
     {
         // Arrange
         var service = new InterfaceGenericService();
@@ -94,7 +94,7 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     }
 
     [TestMethod]
-    public void InterfaceGenericInvalidationClearsCacheEntry()
+    public void Cascading_compute_should_recompute_generic_interface_call_after_cache_invalidation()
     {
         // Arrange
         var service = new InterfaceGenericService();

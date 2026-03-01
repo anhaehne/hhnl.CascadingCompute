@@ -6,7 +6,7 @@ namespace hhnl.CascadingCompute.Tests;
 public sealed partial class GeneratedCascadingComputeAsyncTests
 {
     [TestMethod]
-    public async Task InterceptorUsesGeneratedWrapperCacheForAsync()
+    public async Task Cascading_compute_should_cache_async_call_result()
     {
         // Arrange
         var service = new AsyncInnerService();
@@ -22,7 +22,7 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
     }
 
     [TestMethod]
-    public async Task InvalidateClearsGeneratedCacheEntryForAsync()
+    public async Task Cascading_compute_should_recompute_after_async_cache_invalidation()
     {
         // Arrange
         var service = new AsyncInnerService();
@@ -39,7 +39,7 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
     }
 
     [TestMethod]
-    public async Task NestedServiceCallsUseGeneratedCachesForAsync()
+    public async Task Cascading_compute_should_use_nested_service_caches_for_async_calls()
     {
         // Arrange
         var inner = new AsyncInnerService();
@@ -56,7 +56,7 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
     }
 
     [TestMethod]
-    public async Task InvalidateInnerServiceInvalidatesOuterServiceForAsync()
+    public async Task Cascading_compute_should_invalidate_outer_cache_when_inner_async_cache_is_invalidated()
     {
         // Arrange
         var inner = new AsyncInnerService();
