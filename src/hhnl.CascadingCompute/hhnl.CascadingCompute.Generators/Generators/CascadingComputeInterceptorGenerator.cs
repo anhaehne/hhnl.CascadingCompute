@@ -1,12 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using System.Collections.Immutable;
+using System.Text;
 
 namespace hhnl.CascadingCompute.Generators.Generators;
 
@@ -46,7 +43,7 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
             return null;
 
         var filePath = location.SourceTree?.FilePath;
-        if (string.IsNullOrWhiteSpace(filePath) || IsGeneratedFile(filePath))
+        if (filePath is null || string.IsNullOrWhiteSpace(filePath) || IsGeneratedFile(filePath))
             return null;
 
 #pragma warning disable RSEXPERIMENTAL002
@@ -322,7 +319,8 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
             return $"({enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}){SymbolDisplay.FormatPrimitive(parameter.ExplicitDefaultValue, quoteStrings: true, useHexadecimalNumbers: false)}";
         }
 
-        return SymbolDisplay.FormatPrimitive(parameter.ExplicitDefaultValue, quoteStrings: true, useHexadecimalNumbers: false);
+        return SymbolDisplay.FormatPrimitive(parameter.ExplicitDefaultValue, quoteStrings: true, useHexadecimalNumbers: false)
+            ?? throw new InvalidOperationException($"Unable to format default value of parameter {parameter}");
     }
 
     private static string GetInterceptorName(string methodName, int index)
