@@ -9,6 +9,8 @@ When a method is marked with `[CascadingCompute]`, source generators create:
 - a `CascadingCompute` wrapper property
 - cached method calls
 - `Invalidate<MethodName>(...)` methods
+- `Invalidate<MethodName>(Func<..., bool> predicate)` methods
+- `InvalidateAll<MethodName>()` methods
 - `InvalidateAll()`
 
 The library also supports cascading invalidation through `ValueCache` dependencies.
@@ -68,10 +70,20 @@ var b = service.GetForecast(10); // cached (25)
 service.SetForecast(10, 30); // updates value + invalidates cache entry
 var c = service.GetForecast(10); // recomputes (35)
 
+service.CascadingCompute.InvalidateGetForecast(cityId => cityId > 100); // invalidates matching entries by predicate
+
+service.CascadingCompute.InvalidateAllGetForecast(); // invalidates all GetForecast cache entries
+
 service.SetBaseOffset(2); // changes shared input + invalidates all cache entries
 var d = service.GetForecast(10); // recomputes (32)
 
 service.CascadingCompute.InvalidateAll();
+```
+
+Predicate invalidation allows selective clearing for one method:
+
+```csharp
+service.CascadingCompute.InvalidateGetForecast(cityId => cityId is 10 or 20);
 ```
 
 ## Interface support
@@ -278,6 +290,13 @@ public sealed partial class ProfileService
 ```
 
 `GetDisplayName(5)` called by two different users creates two different cache entries because `_userContext.GetCacheContext()` is automatically included in the generated cache key.
+
+When using predicate invalidation with cache context providers, generated predicates include context values after method parameters:
+
+```csharp
+// signature example: InvalidateGetDisplayName(Func<int, string, bool> predicate)
+service.CascadingCompute.InvalidateGetDisplayName((userId, contextUser) => userId == 5 && contextUser == "alice");
+```
 
 ## Auto invalidation
 

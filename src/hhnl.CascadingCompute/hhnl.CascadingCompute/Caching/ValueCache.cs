@@ -58,4 +58,15 @@ public class ValueCache<TService, TParameters, TResult>
         foreach (var key in _entries.Keys)
             Invalidate(key, onCacheEntryInvalidated);
     }
+
+    public void InvalidateWhere(Func<TParameters, bool> predicate, Action<ICacheEntry<TResult>>? onCacheEntryInvalidated = null)
+    {
+        foreach (var key in _entries.Keys)
+        {
+            if (!predicate(key))
+                continue;
+
+            Invalidate(key, onCacheEntryInvalidated);
+        }
+    }
 }

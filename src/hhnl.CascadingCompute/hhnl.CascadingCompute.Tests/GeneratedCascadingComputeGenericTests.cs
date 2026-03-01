@@ -61,6 +61,27 @@ public sealed partial class GeneratedCascadingComputeGenericTests
     }
 
     [TestMethod]
+    public void Cascading_compute_should_recompute_generic_entries_matching_predicate_invalidation()
+    {
+        // Arrange
+        var service = new GenericService();
+
+        // Act
+        _ = service.CascadingCompute.Echo(1);
+        _ = service.CascadingCompute.Echo(2);
+        _ = service.CascadingCompute.Echo(1);
+        _ = service.CascadingCompute.Echo(2);
+        service.CascadingCompute.InvalidateEcho<int>(value => value == 1);
+        _ = service.CascadingCompute.Echo(1);
+        _ = service.CascadingCompute.Echo(2);
+
+        // Assert
+        CollectionAssert.AreEqual(
+            new[] { (typeof(int), (object?)1), (typeof(int), (object?)2), (typeof(int), (object?)1) },
+            service.Calls.ToArray());
+    }
+
+    [TestMethod]
     public void Cascading_compute_should_cache_call_with_multiple_generic_arguments()
     {
         // Arrange
@@ -132,6 +153,28 @@ public sealed partial class GeneratedCascadingComputeGenericTests
         CollectionAssert.AreEqual(new[] { 5, 5 }, service.Calls.ToArray());
     }
 
+    [TestMethod]
+    public void Cascading_compute_should_include_cache_context_provider_for_generic_methods()
+    {
+        // Arrange
+        var contextProvider = new MutableGenericCacheContextProvider<string>("tenant-a");
+        var service = new GenericContextAwareService(contextProvider);
+
+        // Act
+        _ = service.CascadingCompute.Echo(10);
+        _ = service.CascadingCompute.Echo(10);
+        contextProvider.Context = "tenant-b";
+        _ = service.CascadingCompute.Echo(10);
+
+        // Assert
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                ("tenant-a", typeof(int), (object?)10),
+                ("tenant-b", typeof(int), (object?)10)
+            },
+            service.Calls.ToArray());
+    }
 
     public sealed partial class GenericService
     {
@@ -171,5 +214,29 @@ public sealed partial class GeneratedCascadingComputeGenericTests
 
         public void InvalidateIdentity(T value)
             => CascadingCompute.InvalidateIdentity(value);
+    }
+
+    public sealed partial class GenericContextAwareService(MutableGenericCacheContextProvider<string> contextProvider)
+    {
+        private readonly MutableGenericCacheContextProvider<string> _contextProvider = contextProvider;
+        private readonly List<(string context, Type type, object? value)> _calls = [];
+
+        public IReadOnlyList<(string context, Type type, object? value)> Calls => _calls;
+
+        [CascadingCompute]
+        public T Echo<T>(T value)
+        {
+            _calls.Add((_contextProvider.Context, typeof(T), value));
+            return value;
+        }
+    }
+
+    public sealed class MutableGenericCacheContextProvider<TContext>(TContext context)
+        : hhnl.CascadingCompute.Shared.Interfaces.ICacheContextProvider<TContext>
+    {
+        public TContext Context { get; set; } = context;
+
+        public TContext GetCacheContext()
+            => Context;
     }
 }

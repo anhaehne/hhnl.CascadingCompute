@@ -41,6 +41,45 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     }
 
     [TestMethod]
+    public void Cascading_compute_should_recompute_all_interface_entries_for_method_after_method_wide_invalidation()
+    {
+        // Arrange
+        var inner = new InterfaceInner();
+        IInterfaceInner service = inner;
+
+        // Act
+        _ = service.Add(2, 3);
+        _ = service.Add(4, 5);
+        _ = service.Add(2, 3);
+        service.InvalidateAllAdd();
+        _ = service.Add(2, 3);
+        _ = service.Add(4, 5);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { (2, 3), (4, 5), (2, 3), (4, 5) }, inner.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_recompute_interface_entries_matching_predicate_invalidation()
+    {
+        // Arrange
+        var inner = new InterfaceInner();
+        IInterfaceInner service = inner;
+
+        // Act
+        _ = service.Add(2, 3);
+        _ = service.Add(4, 5);
+        _ = service.Add(2, 3);
+        _ = service.Add(4, 5);
+        service.InvalidateAdd((a, b) => a == 2 && b == 3);
+        _ = service.Add(2, 3);
+        _ = service.Add(4, 5);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { (2, 3), (4, 5), (2, 3) }, inner.Calls.ToArray());
+    }
+
+    [TestMethod]
     public void Cascading_compute_should_use_nested_interface_service_caches()
     {
         // Arrange
@@ -160,6 +199,10 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         int Add(int a, int b);
 
         void InvalidateAdd(int a, int b);
+
+        void InvalidateAdd(Func<int, int, bool> predicate);
+
+        void InvalidateAllAdd();
     }
 
     public sealed partial class InterfaceInner : IInterfaceInner
@@ -176,6 +219,12 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
 
         public void InvalidateAdd(int a, int b)
             => CascadingCompute.InvalidateAdd(a, b);
+
+        public void InvalidateAdd(Func<int, int, bool> predicate)
+            => CascadingCompute.InvalidateAdd(predicate);
+
+        public void InvalidateAllAdd()
+            => CascadingCompute.InvalidateAllAdd();
     }
 
     public sealed partial class InterfaceOuter

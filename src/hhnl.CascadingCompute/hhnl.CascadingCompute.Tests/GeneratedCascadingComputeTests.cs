@@ -39,6 +39,43 @@ public sealed partial class GeneratedCascadingComputeTests
     }
 
     [TestMethod]
+    public void Cascading_compute_should_recompute_all_entries_for_method_after_method_wide_invalidation()
+    {
+        // Arrange
+        var service = new InnerService();
+
+        // Act
+        _ = service.Add(2, 3);
+        _ = service.Add(4, 5);
+        _ = service.Add(2, 3);
+        service.CascadingCompute.InvalidateAllAdd();
+        _ = service.Add(2, 3);
+        _ = service.Add(4, 5);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { (2, 3), (4, 5), (2, 3), (4, 5) }, service.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_recompute_entries_matching_predicate_invalidation()
+    {
+        // Arrange
+        var service = new InnerService();
+
+        // Act
+        _ = service.Add(2, 3);
+        _ = service.Add(4, 5);
+        _ = service.Add(2, 3);
+        _ = service.Add(4, 5);
+        service.CascadingCompute.InvalidateAdd((a, b) => a == 2 && b == 3);
+        _ = service.Add(2, 3);
+        _ = service.Add(4, 5);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { (2, 3), (4, 5), (2, 3) }, service.Calls.ToArray());
+    }
+
+    [TestMethod]
     public void Cascading_compute_should_use_nested_service_caches()
     {
         // Arrange

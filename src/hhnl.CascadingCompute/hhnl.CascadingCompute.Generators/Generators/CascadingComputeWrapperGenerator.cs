@@ -333,6 +333,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             var invalidateParameters = GetParameterList(includedParameters);
             var cacheKeyExpression = GetCacheKeyExpression(method, includedParameters);
             var invocationArguments = GetInvocationArguments(method, includedParameters);
+            var predicateIncludeContext = interfaceSymbol is null;
+            var predicateDelegateType = GetPredicateDelegateType(method, predicateIncludeContext);
+            var predicateInvocationArguments = GetPredicateInvocationArguments(method, includedParameters, predicateIncludeContext);
             var useStaticFactory = includedParameters.Count == method.Parameters.Length;
             var methodAccessibility = GetAccessibility(method.DeclaredAccessibility);
             var methodTypeParameters = GetMethodTypeParameters(method);
@@ -411,6 +414,56 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(innerIndent);
             sb.AppendLine("}");
             sb.AppendLine();
+
+            sb.Append(innerIndent);
+            sb.Append(methodAccessibility);
+            sb.Append(" void Invalidate");
+            sb.Append(method.Name);
+            sb.Append(methodTypeParameters);
+            sb.Append("(");
+            sb.Append(predicateDelegateType);
+            sb.AppendLine(" predicate)");
+            foreach (var constraint in methodConstraints)
+            {
+                sb.Append(innerIndent);
+                sb.Append("    ");
+                sb.AppendLine(constraint);
+            }
+            sb.Append(innerIndent);
+            sb.AppendLine("{");
+            sb.Append(innerIndent);
+            sb.Append("    ");
+            sb.Append(fieldName);
+            sb.Append(".InvalidateWhere(p => ");
+            if (string.IsNullOrEmpty(predicateInvocationArguments))
+            {
+                sb.Append("predicate()");
+            }
+            else
+            {
+                sb.Append("predicate(");
+                sb.Append(predicateInvocationArguments);
+                sb.Append(')');
+            }
+            sb.AppendLine(");");
+            sb.Append(innerIndent);
+            sb.AppendLine("}");
+            sb.AppendLine();
+
+            sb.Append(innerIndent);
+            sb.Append(methodAccessibility);
+            sb.Append(" void InvalidateAll");
+            sb.Append(method.Name);
+            sb.AppendLine("()");
+            sb.Append(innerIndent);
+            sb.AppendLine("{");
+            sb.Append(innerIndent);
+            sb.Append("    ");
+            sb.Append(fieldName);
+            sb.AppendLine(".InvalidateAll();");
+            sb.Append(innerIndent);
+            sb.AppendLine("}");
+            sb.AppendLine();
         }
 
         sb.Append(innerIndent);
@@ -454,6 +507,59 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         var includedParameterNames = new HashSet<string>(includedParameters.Select(parameter => parameter.Name), StringComparer.Ordinal);
         var usesTuple = GetCacheKeyElementCount(method, includedParameters) > 1;
         return string.Join(", ", method.Parameters.Select(parameter => GetInvocationArgument(method, parameter, usesTuple, includedParameterNames.Contains(parameter.Name))));
+    }
+
+    private static string GetPredicateDelegateType(IMethodSymbol method, bool includeCacheContext)
+    {
+        var contextElements = includeCacheContext ? GetCacheContextElements(method) : [];
+        if (method.Parameters.Length == 0 && contextElements.Count == 0)
+            return "global::System.Func<bool>";
+
+        var typeArguments = method.Parameters
+            .Select(parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+            .Concat(contextElements.Select(contextElement => contextElement.TypeName))
+            .Concat(["bool"]);
+
+        return $"global::System.Func<{string.Join(", ", typeArguments)}>";
+    }
+
+    private static string GetPredicateInvocationArguments(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters, bool includeCacheContext)
+    {
+        var contextElements = includeCacheContext ? GetCacheContextElements(method) : [];
+        if (method.Parameters.Length == 0 && contextElements.Count == 0)
+            return string.Empty;
+
+        var arguments = new List<string>();
+        var includedParameterNames = new HashSet<string>(includedParameters.Select(parameter => parameter.Name), StringComparer.Ordinal);
+        var usesTuple = GetCacheKeyElementCount(method, includedParameters) > 1;
+        arguments.AddRange(method.Parameters.Select(parameter => GetPredicateInvocationArgument(method, parameter, usesTuple, includedParameterNames.Contains(parameter.Name))));
+
+        if (contextElements.Count > 0)
+        {
+            if (usesTuple)
+            {
+                arguments.AddRange(contextElements.Select(contextElement => $"p.{contextElement.Name}"));
+            }
+            else
+            {
+                arguments.Add("p");
+            }
+        }
+
+        return string.Join(", ", arguments);
+    }
+
+    private static string GetPredicateInvocationArgument(IMethodSymbol method, IParameterSymbol parameter, bool usesTuple, bool isIncludedInCacheKey)
+    {
+        var parameterType = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        if (!isIncludedInCacheKey)
+            return $"default({parameterType})";
+
+        var expression = usesTuple ? $"p.{EscapeIdentifier(parameter.Name)}" : "p";
+        if (method.IsGenericMethod || ContainsTypeParameter(parameter.Type))
+            return $"({parameterType}){expression}!";
+
+        return expression;
     }
 
     private static string GetParameterTupleExpression(IReadOnlyList<string> elements)
@@ -1288,6 +1394,27 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             }
             sb.Append(memberIndent);
             sb.AppendLine(";");
+
+            sb.Append(memberIndent);
+            sb.Append("void Invalidate");
+            sb.Append(method.Name);
+            sb.Append(methodTypeParameters);
+            sb.Append("(");
+            sb.Append(GetPredicateDelegateType(method, includeCacheContext: false));
+            sb.AppendLine(" predicate)");
+            foreach (var constraint in methodConstraints)
+            {
+                sb.Append(memberIndent);
+                sb.Append("    ");
+                sb.AppendLine(constraint);
+            }
+            sb.Append(memberIndent);
+            sb.AppendLine(";");
+
+            sb.Append(memberIndent);
+            sb.Append("void InvalidateAll");
+            sb.Append(method.Name);
+            sb.AppendLine("();");
             sb.AppendLine();
         }
 

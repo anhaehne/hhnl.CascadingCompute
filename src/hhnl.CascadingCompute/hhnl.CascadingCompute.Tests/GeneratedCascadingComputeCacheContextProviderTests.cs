@@ -46,6 +46,28 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
         CollectionAssert.AreEqual(new[] { 10, 10, 10 }, ((ContextAwareInterfaceService)service).Calls.ToArray());
     }
 
+    [TestMethod]
+    public void Cascading_compute_should_invalidate_entries_matching_cache_context_predicate()
+    {
+        // Arrange
+        var tenantContextProvider = new MutableCacheContextProvider<string>("tenant-a");
+        var userContextProvider = new MutableCacheContextProvider<int>(7);
+        var service = new ContextAwareService(tenantContextProvider, userContextProvider);
+
+        // Act
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+        service.CascadingCompute.InvalidateGetValue((value, tenantContext, userContext) => value == 10 && tenantContext == "tenant-a" && userContext == 7);
+        tenantContextProvider.Context = "tenant-a";
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { 10, 10, 10 }, service.Calls.ToArray());
+    }
+
     public sealed partial class ContextAwareService
     {
         private readonly MutableCacheContextProvider<string> _tenantContextProvider;
