@@ -280,30 +280,32 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         sb.AppendLine("{");
 
         var innerIndent = indent + "    ";
-        var methodCaches = new List<(string CacheFieldName, string? ObserverFieldName)>();
+        var cacheFields = new List<string>();
         foreach (var method in methods)
         {
             var cacheKeyType = GetCacheKeyType(method);
             var fieldName = GetCacheFieldName(method);
-            string? observerFieldName = null;
-            var observerAttribute = GetCacheEntryLifetimeObserverAttribute(method);
-            if (observerAttribute is not null)
+            cacheFields.Add(fieldName);
+
+            var observerFieldName = fieldName + "Observers";
+            var observerInstantiationExpressions = GetCacheEntryLifetimeObserverAttributes(method)
+                .Select(CreateAttributeInstantiationExpression)
+                .Where(static expression => expression is not null)
+                .ToList();
+            sb.Append(innerIndent);
+            sb.Append("private readonly global::hhnl.CascadingCompute.Shared.Attributes.CacheEntryLifetimeObserverAttribute[] ");
+            sb.Append(observerFieldName);
+            if (observerInstantiationExpressions.Count == 0)
             {
-                var observerInstantiationExpression = CreateAttributeInstantiationExpression(observerAttribute);
-                if (observerInstantiationExpression is not null)
-                {
-                    observerFieldName = fieldName + "Observer";
-                    sb.Append(innerIndent);
-                    sb.Append("private readonly global::hhnl.CascadingCompute.Shared.Attributes.CacheEntryLifetimeObserverAttribute ");
-                    sb.Append(observerFieldName);
-                    sb.Append(" = ");
-                    sb.Append(observerInstantiationExpression);
-                    sb.AppendLine(";");
-                    sb.AppendLine();
-                }
+                sb.AppendLine(" = global::System.Array.Empty<global::hhnl.CascadingCompute.Shared.Attributes.CacheEntryLifetimeObserverAttribute>();");
+            }
+            else
+            {
+                sb.Append(" = [");
+                sb.Append(string.Join(", ", observerInstantiationExpressions!));
+                sb.AppendLine("];\n");
             }
 
-            methodCaches.Add((fieldName, observerFieldName));
             sb.Append(innerIndent);
             sb.Append("private readonly global::hhnl.CascadingCompute.Caching.ValueCache<");
             sb.Append(GetContainingTypeName(typeSymbol));
@@ -361,17 +363,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(invocationTypeArguments);
             sb.Append('(');
             sb.Append(GetInvocationArguments(method));
-            sb.Append(')');
-            if (observerFieldName is null)
-            {
-                sb.AppendLine(");");
-            }
-            else
-            {
-                sb.Append(", cacheEntry => ");
-                sb.Append(observerFieldName);
-                sb.AppendLine(".OnCacheEntryCreated(cacheEntry));");
-            }
+            sb.Append("), ");
+            sb.Append(observerFieldName);
+            sb.AppendLine(");");
             sb.Append(innerIndent);
             sb.AppendLine("}");
             sb.AppendLine();
@@ -397,16 +391,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(fieldName);
             sb.Append(".Invalidate(");
             sb.Append(cacheKeyExpression);
-            if (observerFieldName is null)
-            {
-                sb.AppendLine(");");
-            }
-            else
-            {
-                sb.Append(", cacheEntry => ");
-                sb.Append(observerFieldName);
-                sb.AppendLine(".OnCacheEntryInvalidated(cacheEntry));");
-            }
+            sb.AppendLine(");");
             sb.Append(innerIndent);
             sb.AppendLine("}");
             sb.AppendLine();
@@ -416,21 +401,12 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         sb.AppendLine("public void InvalidateAll()");
         sb.Append(innerIndent);
         sb.AppendLine("{");
-        foreach (var methodCache in methodCaches)
+        foreach (var fieldName in cacheFields)
         {
             sb.Append(innerIndent);
             sb.Append("    ");
-            sb.Append(methodCache.CacheFieldName);
-            if (methodCache.ObserverFieldName is null)
-            {
-                sb.AppendLine(".InvalidateAll();");
-            }
-            else
-            {
-                sb.Append(".InvalidateAll(cacheEntry => ");
-                sb.Append(methodCache.ObserverFieldName);
-                sb.AppendLine(".OnCacheEntryInvalidated(cacheEntry));");
-            }
+            sb.Append(fieldName);
+            sb.AppendLine(".InvalidateAll();");
         }
         sb.Append(innerIndent);
         sb.AppendLine("}");
@@ -567,18 +543,14 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     private static string GetCacheResultType(IMethodSymbol method)
         => method.IsGenericMethod ? "global::System.Object" : method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-    private static AttributeData? GetCacheEntryLifetimeObserverAttribute(IMethodSymbol method)
+    private static IReadOnlyList<AttributeData> GetCacheEntryLifetimeObserverAttributes(IMethodSymbol method)
     {
-        var methodAttribute = method.GetAttributes().FirstOrDefault(IsCacheEntryLifetimeObserverAttribute);
-        if (methodAttribute is not null)
-            return methodAttribute;
+        var attributes = new List<AttributeData>();
+
+        attributes.AddRange(method.GetAttributes().Where(IsCacheEntryLifetimeObserverAttribute));
 
         foreach (var interfaceMethod in method.ExplicitInterfaceImplementations)
-        {
-            var interfaceAttribute = interfaceMethod.GetAttributes().FirstOrDefault(IsCacheEntryLifetimeObserverAttribute);
-            if (interfaceAttribute is not null)
-                return interfaceAttribute;
-        }
+            attributes.AddRange(interfaceMethod.GetAttributes().Where(IsCacheEntryLifetimeObserverAttribute));
 
         var containingType = method.ContainingType;
         foreach (var interfaceSymbol in containingType.AllInterfaces)
@@ -588,13 +560,11 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
                 if (!SymbolEqualityComparer.Default.Equals(containingType.FindImplementationForInterfaceMember(interfaceMember), method))
                     continue;
 
-                var interfaceAttribute = interfaceMember.GetAttributes().FirstOrDefault(IsCacheEntryLifetimeObserverAttribute);
-                if (interfaceAttribute is not null)
-                    return interfaceAttribute;
+                attributes.AddRange(interfaceMember.GetAttributes().Where(IsCacheEntryLifetimeObserverAttribute));
             }
         }
 
-        return null;
+        return attributes;
     }
 
     private static bool IsCacheEntryLifetimeObserverAttribute(AttributeData attributeData)

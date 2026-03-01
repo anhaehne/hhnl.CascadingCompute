@@ -1,4 +1,5 @@
-﻿using hhnl.CascadingCompute.Shared.Interfaces;
+﻿using hhnl.CascadingCompute.Shared.Attributes;
+using hhnl.CascadingCompute.Shared.Interfaces;
 using System.Collections.Concurrent;
 
 namespace hhnl.CascadingCompute.Caching;
@@ -9,7 +10,7 @@ public class ValueCache<TService, TParameters, TResult>
 {
     private readonly ConcurrentDictionary<TParameters, CacheEntry<TParameters, TResult>> _entries = new();
 
-    public TResult GetOrAdd(TService service, TParameters parameters, Func<TService, TParameters, TResult> valueFactory, Action<ICacheEntry<TResult>>? onCacheEntryCreated = null)
+    public TResult GetOrAdd(TService service, TParameters parameters, Func<TService, TParameters, TResult> valueFactory, CacheEntryLifetimeObserverAttribute[] cacheEntryLifetimeObserverAttributes)
     {
         var dependent = CacheDependencyContext.Current.Value;
 
@@ -27,7 +28,7 @@ public class ValueCache<TService, TParameters, TResult>
                 return innerEntry.Value;
             }
 
-            var newEntry = new CacheEntry<TParameters, TResult>(parameters, _entries);
+            var newEntry = new CacheEntry<TParameters, TResult>(parameters, _entries, cacheEntryLifetimeObserverAttributes);
             newEntry.AddDependent(dependent);
 
             CacheDependencyContext.Current.Value = newEntry;
@@ -35,7 +36,10 @@ public class ValueCache<TService, TParameters, TResult>
             CacheDependencyContext.Current.Value = dependent;
 
             _entries[parameters] = newEntry;
-            onCacheEntryCreated?.Invoke(newEntry);
+
+            for (int i = 0; i < cacheEntryLifetimeObserverAttributes.Length; i++)
+                cacheEntryLifetimeObserverAttributes[i].OnCacheEntryCreated(newEntry);
+
             return newEntry.Value;
         }
     }

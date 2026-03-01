@@ -1,9 +1,10 @@
-﻿using hhnl.CascadingCompute.Shared.Interfaces;
+﻿using hhnl.CascadingCompute.Shared.Attributes;
+using hhnl.CascadingCompute.Shared.Interfaces;
 using System.Collections.Concurrent;
 
 namespace hhnl.CascadingCompute.Caching;
 
-public class CacheEntry<TParameters, TResult>(TParameters parameters, ConcurrentDictionary<TParameters, CacheEntry<TParameters, TResult>> cache) : IDependentCacheEntry, ICacheEntry<TResult>
+public class CacheEntry<TParameters, TResult>(TParameters parameters, ConcurrentDictionary<TParameters, CacheEntry<TParameters, TResult>> cache, CacheEntryLifetimeObserverAttribute[] cacheEntryLifetimeObserverAttributes) : IDependentCacheEntry, ICacheEntry<TResult>
     where TParameters : notnull
 {
     private List<WeakReference<IDependentCacheEntry>> _dependents = [];
@@ -25,6 +26,9 @@ public class CacheEntry<TParameters, TResult>(TParameters parameters, Concurrent
             if (weakReference.TryGetTarget(out var dependent))
                 dependent.Invalidate();
         }
+
+        for (int i = 0; i < cacheEntryLifetimeObserverAttributes.Length; i++)
+            cacheEntryLifetimeObserverAttributes[i].OnCacheEntryInvalidated(this);
     }
 
 }
