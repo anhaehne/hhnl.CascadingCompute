@@ -3,7 +3,6 @@
 namespace hhnl.CascadingCompute.Tests;
 
 [TestClass]
-[DoNotParallelize]
 public sealed partial class GeneratedCascadingComputeTests
 {
     [TestMethod]
