@@ -96,13 +96,13 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
             var location = candidate.Location;
 
             var receiverType = methodSymbol.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var returnType = methodDefinition.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var returnType = methodSymbol.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var methodName = methodDefinition.Name;
-            var methodTypeParameters = GetMethodTypeParameters(methodDefinition);
-            var methodConstraints = GetMethodConstraints(methodDefinition);
+            var methodTypeParameters = GetInterceptorTypeParameters(methodSymbol);
+            var methodConstraints = GetInterceptorTypeConstraints(methodSymbol);
             var methodTypeArguments = GetMethodTypeArguments(methodDefinition);
-            var parameters = GetParameterList(methodDefinition);
-            var arguments = string.Join(", ", methodDefinition.Parameters.Select(parameter => EscapeIdentifier(parameter.Name)));
+            var parameters = GetParameterList(methodSymbol);
+            var arguments = string.Join(", ", methodSymbol.Parameters.Select(parameter => EscapeIdentifier(parameter.Name)));
             var interceptorName = GetInterceptorName(methodName, index++);
 
             sb.AppendLine($"        [global::System.Runtime.CompilerServices.InterceptsLocationAttribute({location.Version}, {SymbolDisplay.FormatLiteral(location.Data, true)})]");
@@ -214,8 +214,41 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
         if (method.TypeParameters.Length == 0)
             return Array.Empty<string>();
 
-        var constraints = new List<string>();
+        return GetTypeParameterConstraints(method.TypeParameters);
+    }
+
+    private static string GetInterceptorTypeParameters(IMethodSymbol method)
+    {
+        var typeParameters = GetInterceptorTypeParameterSymbols(method);
+        if (typeParameters.Count == 0)
+            return string.Empty;
+
+        return $"<{string.Join(", ", typeParameters.Select(parameter => parameter.Name))}>";
+    }
+
+    private static IReadOnlyList<string> GetInterceptorTypeConstraints(IMethodSymbol method)
+    {
+        var typeParameters = GetInterceptorTypeParameterSymbols(method);
+        if (typeParameters.Count == 0)
+            return Array.Empty<string>();
+
+        return GetTypeParameterConstraints(typeParameters);
+    }
+
+    private static List<ITypeParameterSymbol> GetInterceptorTypeParameterSymbols(IMethodSymbol method)
+    {
+        var typeParameters = new List<ITypeParameterSymbol>();
+        AddTypeParameters(method.ContainingType, typeParameters);
         foreach (var typeParameter in method.TypeParameters)
+            AddTypeParameter(typeParameter, typeParameters);
+        return typeParameters;
+    }
+
+    private static IReadOnlyList<string> GetTypeParameterConstraints(IEnumerable<ITypeParameterSymbol> typeParameters)
+    {
+
+        var constraints = new List<string>();
+        foreach (var typeParameter in typeParameters)
         {
             var parts = new List<string>();
             if (typeParameter.HasNotNullConstraint)
@@ -239,6 +272,31 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
         }
 
         return constraints;
+    }
+
+    private static void AddTypeParameters(ITypeSymbol typeSymbol, List<ITypeParameterSymbol> typeParameters)
+    {
+        switch (typeSymbol)
+        {
+            case ITypeParameterSymbol typeParameter:
+                AddTypeParameter(typeParameter, typeParameters);
+                return;
+            case IArrayTypeSymbol arrayType:
+                AddTypeParameters(arrayType.ElementType, typeParameters);
+                return;
+            case INamedTypeSymbol namedType:
+                foreach (var typeArgument in namedType.TypeArguments)
+                    AddTypeParameters(typeArgument, typeParameters);
+                return;
+        }
+    }
+
+    private static void AddTypeParameter(ITypeParameterSymbol typeParameter, List<ITypeParameterSymbol> typeParameters)
+    {
+        if (typeParameters.Any(existing => SymbolEqualityComparer.Default.Equals(existing, typeParameter)))
+            return;
+
+        typeParameters.Add(typeParameter);
     }
 
     private static string EscapeIdentifier(string name)

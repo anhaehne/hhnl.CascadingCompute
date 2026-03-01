@@ -120,7 +120,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             classMethods ??= [];
 
             var interfaceTypes = classSymbol.AllInterfaces
-                .Where(interfaceSymbol => validInterfaces.ContainsKey(interfaceSymbol))
+                .Where(interfaceSymbol => validInterfaces.ContainsKey((INamedTypeSymbol)interfaceSymbol.OriginalDefinition))
                 .ToArray();
 
             if (classMethods.Count == 0 && interfaceTypes.Length == 0)
@@ -150,9 +150,12 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
             foreach (var interfaceSymbol in interfaceTypes)
             {
-                foreach (var interfaceMethod in validInterfaces[interfaceSymbol])
+                var interfaceDefinition = (INamedTypeSymbol)interfaceSymbol.OriginalDefinition;
+                foreach (var interfaceMethod in validInterfaces[interfaceDefinition])
                 {
-                    if (classSymbol.FindImplementationForInterfaceMember(interfaceMethod) is IMethodSymbol implementation)
+                    var interfaceMember = GetInterfaceMethod(interfaceSymbol, interfaceMethod);
+                    if (interfaceMember is not null
+                        && classSymbol.FindImplementationForInterfaceMember(interfaceMember) is IMethodSymbol implementation)
                         methodSet.Add(implementation);
                 }
             }
@@ -880,7 +883,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
     private static string GetWrapperInterfaceTypeName(INamedTypeSymbol interfaceSymbol)
     {
-        var typeName = interfaceSymbol.Name + GetTypeParameters(interfaceSymbol) + "." + GetWrapperInterfaceName(interfaceSymbol);
+        var typeName = interfaceSymbol.Name + GetTypeArgumentsForReference(interfaceSymbol) + "." + GetWrapperInterfaceName(interfaceSymbol);
         var builder = new StringBuilder("global::");
 
         if (!interfaceSymbol.ContainingNamespace.IsGlobalNamespace)
@@ -900,12 +903,28 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         foreach (var containingType in containingTypes)
         {
             builder.Append(containingType.Name);
-            builder.Append(GetTypeParameters(containingType));
+            builder.Append(GetTypeArgumentsForReference(containingType));
             builder.Append('.');
         }
 
         builder.Append(typeName);
         return builder.ToString();
+    }
+
+    private static IMethodSymbol? GetInterfaceMethod(INamedTypeSymbol interfaceSymbol, IMethodSymbol interfaceMethodDefinition)
+    {
+        return interfaceSymbol
+            .GetMembers(interfaceMethodDefinition.Name)
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(member => SymbolEqualityComparer.Default.Equals(member.OriginalDefinition, interfaceMethodDefinition.OriginalDefinition));
+    }
+
+    private static string GetTypeArgumentsForReference(INamedTypeSymbol typeSymbol)
+    {
+        if (typeSymbol.TypeArguments.Length == 0)
+            return string.Empty;
+
+        return $"<{string.Join(", ", typeSymbol.TypeArguments.Select(argument => argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)))}>";
     }
 
     private sealed class NamedTypeSymbolEqualityComparer : IEqualityComparer<INamedTypeSymbol>

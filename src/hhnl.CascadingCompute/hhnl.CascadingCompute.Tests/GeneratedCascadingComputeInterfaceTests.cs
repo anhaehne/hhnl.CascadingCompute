@@ -113,6 +113,47 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
             service.Calls.ToArray());
     }
 
+    [TestMethod]
+    public void Cascading_compute_should_cache_generic_interface_call_with_multiple_generic_arguments()
+    {
+        // Arrange
+        var service = new InterfaceGenericService();
+        IInterfaceGenericService generic = service;
+
+        // Act
+        var first = generic.CascadingCompute.Pair<int, string>(3, "value");
+        var second = generic.CascadingCompute.Pair<int, string>(3, "value");
+
+        // Assert
+        Assert.AreEqual(first, second);
+        CollectionAssert.AreEqual(
+            new[] { (typeof(int), typeof(string), (object)3, (object)"value") },
+            service.PairCalls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_recompute_generic_interface_call_with_multiple_generic_arguments_after_cache_invalidation()
+    {
+        // Arrange
+        var service = new InterfaceGenericService();
+        IInterfaceGenericService generic = service;
+
+        // Act
+        var first = generic.CascadingCompute.Pair<int, string>(4, "x");
+        generic.CascadingCompute.InvalidatePair<int, string>(4, "x");
+        var second = generic.CascadingCompute.Pair<int, string>(4, "x");
+
+        // Assert
+        Assert.AreEqual(first, second);
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                (typeof(int), typeof(string), (object)4, (object)"x"),
+                (typeof(int), typeof(string), (object)4, (object)"x")
+            },
+            service.PairCalls.ToArray());
+    }
+
     public partial interface IInterfaceInner
     {
         [CascadingCompute]
@@ -163,14 +204,21 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         [CascadingCompute]
         T Echo<T>(T value);
 
+        [CascadingCompute]
+        (TLeft Left, TRight Right) Pair<TLeft, TRight>(TLeft left, TRight right);
+
         void InvalidateEcho<T>(T value);
+
+        void InvalidatePair<TLeft, TRight>(TLeft left, TRight right);
     }
 
     public sealed partial class InterfaceGenericService : IInterfaceGenericService
     {
         private readonly List<(Type type, object value)> _calls = [];
+        private readonly List<(Type leftType, Type rightType, object leftValue, object rightValue)> _pairCalls = [];
 
         public IReadOnlyList<(Type type, object value)> Calls => _calls;
+        public IReadOnlyList<(Type leftType, Type rightType, object leftValue, object rightValue)> PairCalls => _pairCalls;
 
         [CascadingCompute]
         public T Echo<T>(T value)
@@ -179,7 +227,17 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
             return value;
         }
 
+        [CascadingCompute]
+        public (TLeft Left, TRight Right) Pair<TLeft, TRight>(TLeft left, TRight right)
+        {
+            _pairCalls.Add((typeof(TLeft), typeof(TRight), left!, right!));
+            return (left, right);
+        }
+
         public void InvalidateEcho<T>(T value)
             => CascadingCompute.InvalidateEcho<T>(value);
+
+        public void InvalidatePair<TLeft, TRight>(TLeft left, TRight right)
+            => CascadingCompute.InvalidatePair<TLeft, TRight>(left, right);
     }
 }

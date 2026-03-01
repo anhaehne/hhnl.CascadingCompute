@@ -59,6 +59,62 @@ public sealed partial class GeneratedCascadingComputeGenericTests
             service.PairCalls.ToArray());
     }
 
+    [TestMethod]
+    public void Cascading_compute_should_recompute_generic_call_with_multiple_generic_arguments_after_cache_invalidation()
+    {
+        // Arrange
+        var service = new GenericService();
+
+        // Act
+        var first = service.CascadingCompute.Pair<int, string>(2, "x");
+        service.CascadingCompute.InvalidatePair<int, string>(2, "x");
+        var second = service.CascadingCompute.Pair<int, string>(2, "x");
+
+        // Assert
+        Assert.AreEqual(first, second);
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                (typeof(int), typeof(string), (object)2, (object)"x"),
+                (typeof(int), typeof(string), (object)2, (object)"x")
+            },
+            service.PairCalls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_cache_call_result_for_generic_service_declaration()
+    {
+        // Arrange
+        var service = new TypedGenericService<int>();
+
+        // Act
+        var first = service.Identity(4);
+        var second = service.Identity(4);
+
+        // Assert
+        Assert.AreEqual(4, first);
+        Assert.AreEqual(first, second);
+        CollectionAssert.AreEqual(new[] { 4 }, service.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_recompute_after_cache_invalidation_for_generic_service_declaration()
+    {
+        // Arrange
+        var service = new TypedGenericService<int>();
+
+        // Act
+        var first = service.Identity(5);
+        service.InvalidateIdentity(5);
+        var second = service.Identity(5);
+
+        // Assert
+        Assert.AreEqual(5, first);
+        Assert.AreEqual(first, second);
+        CollectionAssert.AreEqual(new[] { 5, 5 }, service.Calls.ToArray());
+    }
+
+
     public sealed partial class GenericService
     {
         private readonly List<(Type type, object value)> _calls = [];
@@ -80,5 +136,22 @@ public sealed partial class GeneratedCascadingComputeGenericTests
             _pairCalls.Add((typeof(TLeft), typeof(TRight), left!, right!));
             return (left, right);
         }
+    }
+
+    public sealed partial class TypedGenericService<T>
+    {
+        private readonly List<T> _calls = [];
+
+        public IReadOnlyList<T> Calls => _calls;
+
+        [CascadingCompute]
+        public T Identity(T value)
+        {
+            _calls.Add(value);
+            return value;
+        }
+
+        public void InvalidateIdentity(T value)
+            => CascadingCompute.InvalidateIdentity(value);
     }
 }
