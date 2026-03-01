@@ -86,6 +86,12 @@ Predicate invalidation allows selective clearing for one method:
 service.CascadingCompute.InvalidateGetForecast(cityId => cityId is 10 or 20);
 ```
 
+### Parameter requirements and behavior
+Two calls to the same method are considered the same cache entry if all parameters and context parameters (see below) are equal (== operator).
+If you have to pass complex types as parameters, make sure to implement equality members (Equals/GetHashCode) or use reference types with stable references.
+If you pass a list of items, you can use `EquatableSet<T>`. This class uses a hash set internally and implements equality based on the set of items, ignoring order and duplicates.
+Be aware that all parameters are stored in memory until the cache entry is invalidated, so avoid passing large objects or collections as parameters.
+
 ## Interface support
 
 `[CascadingCompute]` also works on partial interfaces.
