@@ -45,7 +45,7 @@ public sealed partial class GeneratedCascadingComputeAutoInvalidateTests
         public IReadOnlyList<int> Calls => _calls;
 
         [CascadingCompute]
-        [AutoInvalidate(milliseconds: 25)]
+        [AutoInvalidate(25)]
         public int GetValue(int value)
         {
             _calls.Add(value);

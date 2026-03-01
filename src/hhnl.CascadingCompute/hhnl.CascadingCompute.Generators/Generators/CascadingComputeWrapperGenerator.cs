@@ -12,6 +12,8 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 {
     private const string AttributeMetadataName = "hhnl.CascadingCompute.Shared.Attributes.CascadingComputeAttribute";
     private const string CacheEntryLifetimeObserverAttributeMetadataName = "hhnl.CascadingCompute.Shared.Attributes.CacheEntryLifetimeObserverAttribute";
+    private const string CacheContextProviderInterfaceNamespace = "hhnl.CascadingCompute.Shared.Interfaces";
+    private const string CacheContextProviderInterfaceName = "ICacheContextProvider";
 
     private static readonly DiagnosticDescriptor ClassMustBePartial = new(
         "CCG001",
@@ -490,6 +492,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             else
                 yield return EscapeIdentifier(parameter.Name);
         }
+
+        foreach (var cacheContextElement in GetCacheContextElements(method))
+            yield return cacheContextElement.Expression;
     }
 
     private static IEnumerable<string> GetCacheKeyTypeElements(IMethodSymbol method, bool includeNames)
@@ -507,10 +512,18 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             else
                 yield return typeName;
         }
+
+        foreach (var cacheContextElement in GetCacheContextElements(method))
+        {
+            if (includeNames)
+                yield return $"{cacheContextElement.TypeName} {cacheContextElement.Name}";
+            else
+                yield return cacheContextElement.TypeName;
+        }
     }
 
     private static int GetCacheKeyElementCount(IMethodSymbol method)
-        => method.TypeParameters.Length + method.Parameters.Length;
+        => method.TypeParameters.Length + method.Parameters.Length + GetCacheContextElements(method).Count;
 
     private static string GetInvocationArgument(IMethodSymbol method, IParameterSymbol parameter, bool usesTuple)
     {
@@ -542,6 +555,70 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
     private static string GetCacheResultType(IMethodSymbol method)
         => method.IsGenericMethod ? "global::System.Object" : method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+    private static IReadOnlyList<CacheContextElement> GetCacheContextElements(IMethodSymbol method)
+    {
+        var elements = new List<CacheContextElement>();
+        var index = 0;
+
+        foreach (var member in method.ContainingType.GetMembers())
+        {
+            if (member is IFieldSymbol fieldSymbol
+                && !fieldSymbol.IsStatic
+                && !fieldSymbol.IsImplicitlyDeclared
+                && TryGetCacheContextType(fieldSymbol.Type, out var fieldContextType))
+            {
+                elements.Add(new CacheContextElement(
+                    $"cacheContext{index++}",
+                    $"implementation.{EscapeIdentifier(fieldSymbol.Name)}.GetCacheContext()",
+                    fieldContextType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                continue;
+            }
+
+            if (member is IPropertySymbol propertySymbol
+                && !propertySymbol.IsStatic
+                && propertySymbol.GetMethod is not null
+                && TryGetCacheContextType(propertySymbol.Type, out var propertyContextType))
+            {
+                elements.Add(new CacheContextElement(
+                    $"cacheContext{index++}",
+                    $"implementation.{EscapeIdentifier(propertySymbol.Name)}.GetCacheContext()",
+                    propertyContextType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+            }
+        }
+
+        return elements;
+    }
+
+    private static bool TryGetCacheContextType(ITypeSymbol typeSymbol, out ITypeSymbol cacheContextType)
+    {
+        if (typeSymbol is INamedTypeSymbol namedTypeSymbol)
+        {
+            if (IsCacheContextProviderInterface(namedTypeSymbol))
+            {
+                cacheContextType = namedTypeSymbol.TypeArguments[0];
+                return true;
+            }
+
+            foreach (var interfaceSymbol in namedTypeSymbol.AllInterfaces)
+            {
+                if (IsCacheContextProviderInterface(interfaceSymbol))
+                {
+                    cacheContextType = interfaceSymbol.TypeArguments[0];
+                    return true;
+                }
+            }
+        }
+
+        cacheContextType = null!;
+        return false;
+    }
+
+    private static bool IsCacheContextProviderInterface(INamedTypeSymbol typeSymbol)
+        => typeSymbol is { Name: CacheContextProviderInterfaceName, Arity: 1 }
+            && typeSymbol.ContainingNamespace.ToDisplayString() == CacheContextProviderInterfaceNamespace;
+
+    private sealed record CacheContextElement(string Name, string Expression, string TypeName);
 
     private static IReadOnlyList<AttributeData> GetCacheEntryLifetimeObserverAttributes(IMethodSymbol method)
     {

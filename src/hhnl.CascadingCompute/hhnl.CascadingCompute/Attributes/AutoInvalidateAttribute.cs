@@ -10,7 +10,7 @@ public sealed class AutoInvalidateAttribute : CacheEntryLifetimeObserverAttribut
 
     private readonly ConditionalWeakTable<object, Timer> _timers = [];
 
-    public AutoInvalidateAttribute(long timeInMilliseconds)
+    public AutoInvalidateAttribute(int timeInMilliseconds)
     {
         if (timeInMilliseconds <= 0)
             throw new ArgumentOutOfRangeException(nameof(timeInMilliseconds), "Time in milliseconds must be greater than zero.");
@@ -18,7 +18,7 @@ public sealed class AutoInvalidateAttribute : CacheEntryLifetimeObserverAttribut
         _dueTime = timeInMilliseconds;
     }
 
-    public AutoInvalidateAttribute(int years = 0, int months = 0, int days = 0, int hours = 0, int minutes = 0, int seconds = 0, int milliseconds = 0)
+    public AutoInvalidateAttribute(int years, int months, int days, int hours, int minutes, int seconds, int milliseconds)
     {
         var timeSpan = new TimeSpan(days + years * 365 + months * 30, hours, minutes, seconds, milliseconds);
         if (timeSpan <= TimeSpan.Zero)
