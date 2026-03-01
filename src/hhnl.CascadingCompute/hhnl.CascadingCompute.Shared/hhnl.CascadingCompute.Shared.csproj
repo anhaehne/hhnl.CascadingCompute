@@ -1,11 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <VersionPrefix>0.1.0</VersionPrefix>
         <TargetFramework>netstandard2.0</TargetFramework>
         <ImplicitUsings>true</ImplicitUsings>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
+        <IsPackable>true</IsPackable>
     </PropertyGroup>
+
+    <Import Project="..\hhnl.CascadingCompute.Packaging.targets" />
 
 </Project>
