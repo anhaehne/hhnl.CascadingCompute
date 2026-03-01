@@ -10,6 +10,7 @@ namespace hhnl.CascadingCompute.Generators.Generators;
 [Generator]
 public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 {
+    private static readonly Type[] _ignoredParameterTypes = [typeof(CancellationToken)];
     private const string AttributeMetadataName = "hhnl.CascadingCompute.Shared.Attributes.CascadingComputeAttribute";
     private const string CacheEntryLifetimeObserverAttributeMetadataName = "hhnl.CascadingCompute.Shared.Attributes.CacheEntryLifetimeObserverAttribute";
     private const string CacheContextProviderInterfaceNamespace = "hhnl.CascadingCompute.Shared.Interfaces";
@@ -650,6 +651,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
         foreach (var parameter in method.Parameters)
         {
+            if (IsIgnoredParameterType(parameter.Type))
+                ignoredParameterNames.Add(parameter.Name);
+
             foreach (var attribute in parameter.GetAttributes())
                 ApplyIgnoreAttribute(attribute, method, ignoredParameterNames, parameter);
         }
@@ -797,6 +801,12 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
     private static bool IsIgnoreParameterAttribute(AttributeData attribute)
         => attribute.AttributeClass?.ToDisplayString() == IgnoreParameterAttributeMetadataName;
+
+    private static bool IsIgnoredParameterType(ITypeSymbol typeSymbol)
+    {
+        var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
+        return _ignoredParameterTypes.Any(ignoredType => string.Equals(ignoredType.FullName, typeName, StringComparison.Ordinal));
+    }
 
     private sealed record IgnoreRule(ITypeSymbol? TypeFilter, string? NameFilter, bool HasFilter);
 
