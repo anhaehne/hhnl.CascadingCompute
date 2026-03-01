@@ -240,4 +240,5 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         public void InvalidatePair<TLeft, TRight>(TLeft left, TRight right)
             => CascadingCompute.InvalidatePair<TLeft, TRight>(left, right);
     }
+
 }

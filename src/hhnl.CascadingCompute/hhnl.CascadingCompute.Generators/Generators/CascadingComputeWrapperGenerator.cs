@@ -11,6 +11,7 @@ namespace hhnl.CascadingCompute.Generators.Generators;
 public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 {
     private const string AttributeMetadataName = "hhnl.CascadingCompute.Shared.Attributes.CascadingComputeAttribute";
+    private const string CacheEntryLifetimeObserverAttributeMetadataName = "hhnl.CascadingCompute.Shared.Attributes.CacheEntryLifetimeObserverAttribute";
 
     private static readonly DiagnosticDescriptor ClassMustBePartial = new(
         "CCG001",
@@ -279,12 +280,30 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         sb.AppendLine("{");
 
         var innerIndent = indent + "    ";
-        var cacheFields = new List<string>();
+        var methodCaches = new List<(string CacheFieldName, string? ObserverFieldName)>();
         foreach (var method in methods)
         {
             var cacheKeyType = GetCacheKeyType(method);
             var fieldName = GetCacheFieldName(method);
-            cacheFields.Add(fieldName);
+            string? observerFieldName = null;
+            var observerAttribute = GetCacheEntryLifetimeObserverAttribute(method);
+            if (observerAttribute is not null)
+            {
+                var observerInstantiationExpression = CreateAttributeInstantiationExpression(observerAttribute);
+                if (observerInstantiationExpression is not null)
+                {
+                    observerFieldName = fieldName + "Observer";
+                    sb.Append(innerIndent);
+                    sb.Append("private readonly global::hhnl.CascadingCompute.Shared.Attributes.CacheEntryLifetimeObserverAttribute ");
+                    sb.Append(observerFieldName);
+                    sb.Append(" = ");
+                    sb.Append(observerInstantiationExpression);
+                    sb.AppendLine(";");
+                    sb.AppendLine();
+                }
+            }
+
+            methodCaches.Add((fieldName, observerFieldName));
             sb.Append(innerIndent);
             sb.Append("private readonly global::hhnl.CascadingCompute.Caching.ValueCache<");
             sb.Append(GetContainingTypeName(typeSymbol));
@@ -342,7 +361,17 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(invocationTypeArguments);
             sb.Append('(');
             sb.Append(GetInvocationArguments(method));
-            sb.AppendLine("));");
+            sb.Append(')');
+            if (observerFieldName is null)
+            {
+                sb.AppendLine(");");
+            }
+            else
+            {
+                sb.Append(", cacheEntry => ");
+                sb.Append(observerFieldName);
+                sb.AppendLine(".OnCacheEntryCreated(cacheEntry));");
+            }
             sb.Append(innerIndent);
             sb.AppendLine("}");
             sb.AppendLine();
@@ -368,7 +397,16 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(fieldName);
             sb.Append(".Invalidate(");
             sb.Append(cacheKeyExpression);
-            sb.AppendLine(");");
+            if (observerFieldName is null)
+            {
+                sb.AppendLine(");");
+            }
+            else
+            {
+                sb.Append(", cacheEntry => ");
+                sb.Append(observerFieldName);
+                sb.AppendLine(".OnCacheEntryInvalidated(cacheEntry));");
+            }
             sb.Append(innerIndent);
             sb.AppendLine("}");
             sb.AppendLine();
@@ -378,12 +416,21 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         sb.AppendLine("public void InvalidateAll()");
         sb.Append(innerIndent);
         sb.AppendLine("{");
-        foreach (var fieldName in cacheFields)
+        foreach (var methodCache in methodCaches)
         {
             sb.Append(innerIndent);
             sb.Append("    ");
-            sb.Append(fieldName);
-            sb.AppendLine(".InvalidateAll();");
+            sb.Append(methodCache.CacheFieldName);
+            if (methodCache.ObserverFieldName is null)
+            {
+                sb.AppendLine(".InvalidateAll();");
+            }
+            else
+            {
+                sb.Append(".InvalidateAll(cacheEntry => ");
+                sb.Append(methodCache.ObserverFieldName);
+                sb.AppendLine(".OnCacheEntryInvalidated(cacheEntry));");
+            }
         }
         sb.Append(innerIndent);
         sb.AppendLine("}");
@@ -519,6 +566,142 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
     private static string GetCacheResultType(IMethodSymbol method)
         => method.IsGenericMethod ? "global::System.Object" : method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+    private static AttributeData? GetCacheEntryLifetimeObserverAttribute(IMethodSymbol method)
+    {
+        var methodAttribute = method.GetAttributes().FirstOrDefault(IsCacheEntryLifetimeObserverAttribute);
+        if (methodAttribute is not null)
+            return methodAttribute;
+
+        foreach (var interfaceMethod in method.ExplicitInterfaceImplementations)
+        {
+            var interfaceAttribute = interfaceMethod.GetAttributes().FirstOrDefault(IsCacheEntryLifetimeObserverAttribute);
+            if (interfaceAttribute is not null)
+                return interfaceAttribute;
+        }
+
+        var containingType = method.ContainingType;
+        foreach (var interfaceSymbol in containingType.AllInterfaces)
+        {
+            foreach (var interfaceMember in interfaceSymbol.GetMembers(method.Name).OfType<IMethodSymbol>())
+            {
+                if (!SymbolEqualityComparer.Default.Equals(containingType.FindImplementationForInterfaceMember(interfaceMember), method))
+                    continue;
+
+                var interfaceAttribute = interfaceMember.GetAttributes().FirstOrDefault(IsCacheEntryLifetimeObserverAttribute);
+                if (interfaceAttribute is not null)
+                    return interfaceAttribute;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsCacheEntryLifetimeObserverAttribute(AttributeData attributeData)
+        => InheritsFrom(attributeData.AttributeClass, CacheEntryLifetimeObserverAttributeMetadataName);
+
+    private static bool InheritsFrom(INamedTypeSymbol? typeSymbol, string metadataName)
+    {
+        while (typeSymbol is not null)
+        {
+            if (typeSymbol.ToDisplayString() == metadataName)
+                return true;
+            typeSymbol = typeSymbol.BaseType;
+        }
+
+        return false;
+    }
+
+    private static string? CreateAttributeInstantiationExpression(AttributeData attributeData)
+    {
+        if (attributeData.AttributeClass is null)
+            return null;
+
+        var constructorArguments = new List<string>(attributeData.ConstructorArguments.Length);
+        foreach (var constructorArgument in attributeData.ConstructorArguments)
+        {
+            var expression = GetTypedConstantExpression(constructorArgument);
+            if (expression is null)
+                return null;
+            constructorArguments.Add(expression);
+        }
+
+        var expressionBuilder = new StringBuilder();
+        expressionBuilder.Append("new ");
+        expressionBuilder.Append(attributeData.AttributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        expressionBuilder.Append('(');
+        expressionBuilder.Append(string.Join(", ", constructorArguments));
+        expressionBuilder.Append(')');
+
+        if (attributeData.NamedArguments.Length > 0)
+        {
+            var namedArguments = new List<string>(attributeData.NamedArguments.Length);
+            foreach (var namedArgument in attributeData.NamedArguments)
+            {
+                var expression = GetTypedConstantExpression(namedArgument.Value);
+                if (expression is null)
+                    return null;
+                namedArguments.Add($"{namedArgument.Key} = {expression}");
+            }
+
+            expressionBuilder.Append(" { ");
+            expressionBuilder.Append(string.Join(", ", namedArguments));
+            expressionBuilder.Append(" }");
+        }
+
+        return expressionBuilder.ToString();
+    }
+
+    private static string? GetTypedConstantExpression(TypedConstant typedConstant)
+    {
+        if (typedConstant.IsNull)
+            return "null";
+
+        return typedConstant.Kind switch
+        {
+            TypedConstantKind.Primitive => SymbolDisplay.FormatPrimitive(typedConstant.Value, quoteStrings: true, useHexadecimalNumbers: false),
+            TypedConstantKind.Type => $"typeof({((ITypeSymbol)typedConstant.Value!).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})",
+            TypedConstantKind.Enum => GetEnumValueExpression(typedConstant),
+            TypedConstantKind.Array => GetArrayExpression(typedConstant),
+            _ => null
+        };
+    }
+
+    private static string? GetEnumValueExpression(TypedConstant typedConstant)
+    {
+        if (typedConstant.Type is not INamedTypeSymbol enumType)
+            return null;
+
+        var enumValue = typedConstant.Value;
+        var enumMember = enumType.GetMembers()
+            .OfType<IFieldSymbol>()
+            .FirstOrDefault(member => member.HasConstantValue && Equals(member.ConstantValue, enumValue));
+
+        if (enumMember is not null)
+            return $"{enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{enumMember.Name}";
+
+        return $"({enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}){SymbolDisplay.FormatPrimitive(enumValue, quoteStrings: true, useHexadecimalNumbers: false)}";
+    }
+
+    private static string? GetArrayExpression(TypedConstant typedConstant)
+    {
+        if (typedConstant.IsNull)
+            return "null";
+
+        if (typedConstant.Type is not IArrayTypeSymbol arrayType)
+            return null;
+
+        var values = new List<string>(typedConstant.Values.Length);
+        foreach (var value in typedConstant.Values)
+        {
+            var valueExpression = GetTypedConstantExpression(value);
+            if (valueExpression is null)
+                return null;
+            values.Add(valueExpression);
+        }
+
+        return $"new {arrayType.ElementType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}[] {{ {string.Join(", ", values)} }}";
+    }
 
     private static string GetParameterList(IMethodSymbol method)
     {

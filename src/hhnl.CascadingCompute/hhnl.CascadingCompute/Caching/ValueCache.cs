@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using hhnl.CascadingCompute.Shared.Interfaces;
+using System.Collections.Concurrent;
 
 namespace hhnl.CascadingCompute.Caching;
 
@@ -8,7 +9,7 @@ public class ValueCache<TService, TParameters, TResult>
 {
     private readonly ConcurrentDictionary<TParameters, CacheEntry<TParameters, TResult>> _entries = new();
 
-    public TResult GetOrAdd(TService service, TParameters parameters, Func<TService, TParameters, TResult> valueFactory)
+    public TResult GetOrAdd(TService service, TParameters parameters, Func<TService, TParameters, TResult> valueFactory, Action<ICacheEntry<TResult>>? onCacheEntryCreated = null)
     {
         var dependent = CacheDependencyContext.Current.Value;
 
@@ -34,19 +35,23 @@ public class ValueCache<TService, TParameters, TResult>
             CacheDependencyContext.Current.Value = dependent;
 
             _entries[parameters] = newEntry;
+            onCacheEntryCreated?.Invoke(newEntry);
             return newEntry.Value;
         }
     }
 
-    public void Invalidate(TParameters parameters)
+    public void Invalidate(TParameters parameters, Action<ICacheEntry<TResult>>? onCacheEntryInvalidated = null)
     {
         if (_entries.TryRemove(parameters, out var entry))
+        {
             entry.Invalidate();
+            onCacheEntryInvalidated?.Invoke(entry);
+        }
     }
 
-    public void InvalidateAll()
+    public void InvalidateAll(Action<ICacheEntry<TResult>>? onCacheEntryInvalidated = null)
     {
         foreach (var key in _entries.Keys)
-            Invalidate(key);
+            Invalidate(key, onCacheEntryInvalidated);
     }
 }
