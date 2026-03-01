@@ -5,6 +5,7 @@
         <ImplicitUsings>true</ImplicitUsings>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
     </PropertyGroup>
 
     <ItemGroup>

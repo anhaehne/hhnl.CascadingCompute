@@ -3,7 +3,6 @@ using hhnl.CascadingCompute.Shared.Attributes;
 namespace hhnl.CascadingCompute.Tests;
 
 [TestClass]
-[DoNotParallelize]
 public sealed partial class GeneratedCascadingComputeInterfaceTests
 {
     [TestMethod]
@@ -11,7 +10,6 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     {
         // Arrange
         var inner = new InterfaceInner();
-        inner.CascadingCompute.InvalidateAll();
         IInterfaceInner service = inner;
 
         // Act
@@ -29,7 +27,6 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     {
         // Arrange
         var inner = new InterfaceInner();
-        inner.CascadingCompute.InvalidateAll();
         IInterfaceInner service = inner;
 
         // Act
@@ -49,8 +46,6 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         // Arrange
         var inner = new InterfaceInner();
         var outer = new InterfaceOuter(inner);
-        inner.CascadingCompute.InvalidateAll();
-        outer.CascadingCompute.InvalidateAll();
 
         // Act
         var first = outer.AddTwice(1, 2);
@@ -68,8 +63,6 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         // Arrange
         var inner = new InterfaceInner();
         var outer = new InterfaceOuter(inner);
-        inner.CascadingCompute.InvalidateAll();
-        outer.CascadingCompute.InvalidateAll();
 
         // Act
         var first = outer.AddTwice(1, 2);
@@ -80,6 +73,44 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         Assert.AreEqual(first, second);
         CollectionAssert.AreEqual(new[] { (1, 2), (1, 2) }, outer.Calls.ToArray());
         CollectionAssert.AreEqual(new[] { (1, 2), (3, 2), (1, 2) }, inner.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void InterfaceGenericMethodUsesGeneratedWrapperCache()
+    {
+        // Arrange
+        var service = new InterfaceGenericService();
+        IInterfaceGenericService generic = service;
+
+        // Act
+        var first = generic.CascadingCompute.Echo(1);
+        var second = generic.CascadingCompute.Echo(1);
+        // Assert
+        Assert.AreEqual(1, first);
+        Assert.AreEqual(first, second);
+        CollectionAssert.AreEqual(
+            new[] { (typeof(int), (object)1) },
+            service.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void InterfaceGenericInvalidationClearsCacheEntry()
+    {
+        // Arrange
+        var service = new InterfaceGenericService();
+        IInterfaceGenericService generic = service;
+
+        // Act
+        var first = generic.CascadingCompute.Echo(2);
+        generic.CascadingCompute.InvalidateEcho<int>(2);
+        var second = generic.CascadingCompute.Echo(2);
+
+        // Assert
+        Assert.AreEqual(2, first);
+        Assert.AreEqual(first, second);
+        CollectionAssert.AreEqual(
+            new[] { (typeof(int), (object)2), (typeof(int), (object)2) },
+            service.Calls.ToArray());
     }
 
     public partial interface IInterfaceInner
@@ -96,7 +127,6 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
 
         public IReadOnlyList<(int a, int b)> Calls => _calls;
 
-        [CascadingCompute]
         public int Add(int a, int b)
         {
             _calls.Add((a, b));
@@ -126,5 +156,30 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
             var first = _inner.Add(a, b);
             return _inner.Add(first, b);
         }
+    }
+
+    public partial interface IInterfaceGenericService
+    {
+        [CascadingCompute]
+        T Echo<T>(T value);
+
+        void InvalidateEcho<T>(T value);
+    }
+
+    public sealed partial class InterfaceGenericService : IInterfaceGenericService
+    {
+        private readonly List<(Type type, object value)> _calls = [];
+
+        public IReadOnlyList<(Type type, object value)> Calls => _calls;
+
+        [CascadingCompute]
+        public T Echo<T>(T value)
+        {
+            _calls.Add((typeof(T), value!));
+            return value;
+        }
+
+        public void InvalidateEcho<T>(T value)
+            => CascadingCompute.InvalidateEcho<T>(value);
     }
 }

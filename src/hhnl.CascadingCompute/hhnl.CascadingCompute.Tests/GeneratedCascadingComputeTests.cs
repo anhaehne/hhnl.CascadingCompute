@@ -11,7 +11,6 @@ public sealed partial class GeneratedCascadingComputeTests
     {
         // Arrange
         var service = new InnerService();
-        service.CascadingCompute.InvalidateAll();
 
         // Act
         var first = service.Add(1, 2);
@@ -28,7 +27,6 @@ public sealed partial class GeneratedCascadingComputeTests
     {
         // Arrange
         var service = new InnerService();
-        service.CascadingCompute.InvalidateAll();
 
         // Act
         var first = service.Add(2, 3);
@@ -47,8 +45,6 @@ public sealed partial class GeneratedCascadingComputeTests
         // Arrange
         var inner = new InnerService();
         var outer = new OuterService(inner);
-        inner.CascadingCompute.InvalidateAll();
-        outer.CascadingCompute.InvalidateAll();
 
         // Act
         var first = outer.AddTwice(1, 2);
@@ -66,8 +62,6 @@ public sealed partial class GeneratedCascadingComputeTests
         // Arrange
         var inner = new InnerService();
         var outer = new OuterService(inner);
-        inner.CascadingCompute.InvalidateAll();
-        outer.CascadingCompute.InvalidateAll();
 
         // Act
         var first = outer.AddTwice(1, 2);
@@ -78,6 +72,42 @@ public sealed partial class GeneratedCascadingComputeTests
         Assert.AreEqual(first, second);
         CollectionAssert.AreEqual(new[] { (1, 2), (1, 2) }, outer.Calls.ToArray());
         CollectionAssert.AreEqual(new[] { (1, 2), (3, 2), (1, 2) }, inner.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void GenericMethodUsesGeneratedWrapperCache()
+    {
+        // Arrange
+        var service = new GenericService();
+
+        // Act
+        var first = service.CascadingCompute.Echo(1);
+        var second = service.CascadingCompute.Echo(1);
+        // Assert
+        Assert.AreEqual(1, first);
+        Assert.AreEqual(first, second);
+        CollectionAssert.AreEqual(
+            new[] { (typeof(int), (object)1) },
+            service.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void GenericMethodInvalidationClearsCacheEntry()
+    {
+        // Arrange
+        var service = new GenericService();
+
+        // Act
+        var first = service.CascadingCompute.Echo(2);
+        service.CascadingCompute.InvalidateEcho<int>(2);
+        var second = service.CascadingCompute.Echo(2);
+
+        // Assert
+        Assert.AreEqual(2, first);
+        Assert.AreEqual(first, second);
+        CollectionAssert.AreEqual(
+            new[] { (typeof(int), (object)2), (typeof(int), (object)2) },
+            service.Calls.ToArray());
     }
 
 
@@ -116,4 +146,17 @@ public sealed partial class GeneratedCascadingComputeTests
         }
     }
 
+    public sealed partial class GenericService
+    {
+        private readonly List<(Type type, object value)> _calls = [];
+
+        public IReadOnlyList<(Type type, object value)> Calls => _calls;
+
+        [CascadingCompute]
+        public T Echo<T>(T value)
+        {
+            _calls.Add((typeof(T), value!));
+            return value;
+        }
+    }
 }

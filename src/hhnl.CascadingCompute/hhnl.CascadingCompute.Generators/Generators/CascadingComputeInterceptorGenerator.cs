@@ -89,16 +89,20 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
         foreach (var candidate in candidates)
         {
             var methodSymbol = candidate.Method;
+            var methodDefinition = methodSymbol.OriginalDefinition;
             if (methodSymbol.ContainingType is null)
                 continue;
 
             var location = candidate.Location;
 
             var receiverType = methodSymbol.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var returnType = methodSymbol.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var methodName = methodSymbol.Name;
-            var parameters = GetParameterList(methodSymbol);
-            var arguments = string.Join(", ", methodSymbol.Parameters.Select(parameter => EscapeIdentifier(parameter.Name)));
+            var returnType = methodDefinition.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var methodName = methodDefinition.Name;
+            var methodTypeParameters = GetMethodTypeParameters(methodDefinition);
+            var methodConstraints = GetMethodConstraints(methodDefinition);
+            var methodTypeArguments = GetMethodTypeArguments(methodDefinition);
+            var parameters = GetParameterList(methodDefinition);
+            var arguments = string.Join(", ", methodDefinition.Parameters.Select(parameter => EscapeIdentifier(parameter.Name)));
             var interceptorName = GetInterceptorName(methodName, index++);
 
             sb.AppendLine($"        [global::System.Runtime.CompilerServices.InterceptsLocationAttribute({location.Version}, {SymbolDisplay.FormatLiteral(location.Data, true)})]");
@@ -106,6 +110,7 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
             sb.Append(returnType);
             sb.Append(' ');
             sb.Append(interceptorName);
+            sb.Append(methodTypeParameters);
             sb.Append("(this ");
             sb.Append(receiverType);
             sb.Append(" __instance");
@@ -115,9 +120,15 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
                 sb.Append(parameters);
             }
             sb.AppendLine(")");
+            foreach (var constraint in methodConstraints)
+            {
+                sb.Append("        ");
+                sb.AppendLine(constraint);
+            }
             sb.AppendLine("        {");
             sb.Append("            return __instance.CascadingCompute.");
             sb.Append(methodName);
+            sb.Append(methodTypeArguments);
             sb.Append('(');
             sb.Append(arguments);
             sb.AppendLine(");");
@@ -180,6 +191,54 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
             var defaultValue = parameter.HasExplicitDefaultValue ? " = " + GetDefaultValueExpression(parameter) : string.Empty;
             return $"{modifier}{typeName} {EscapeIdentifier(parameter.Name)}{defaultValue}";
         }));
+    }
+
+    private static string GetMethodTypeParameters(IMethodSymbol method)
+    {
+        if (method.TypeParameters.Length == 0)
+            return string.Empty;
+
+        return $"<{string.Join(", ", method.TypeParameters.Select(parameter => parameter.Name))}>";
+    }
+
+    private static string GetMethodTypeArguments(IMethodSymbol method)
+    {
+        if (method.TypeParameters.Length == 0)
+            return string.Empty;
+
+        return $"<{string.Join(", ", method.TypeParameters.Select(parameter => parameter.Name))}>";
+    }
+
+    private static IReadOnlyList<string> GetMethodConstraints(IMethodSymbol method)
+    {
+        if (method.TypeParameters.Length == 0)
+            return Array.Empty<string>();
+
+        var constraints = new List<string>();
+        foreach (var typeParameter in method.TypeParameters)
+        {
+            var parts = new List<string>();
+            if (typeParameter.HasNotNullConstraint)
+                parts.Add("notnull");
+            if (typeParameter.HasReferenceTypeConstraint)
+                parts.Add(typeParameter.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated ? "class?" : "class");
+            if (typeParameter.HasUnmanagedTypeConstraint)
+                parts.Add("unmanaged");
+            if (typeParameter.HasValueTypeConstraint)
+                parts.Add("struct");
+
+            parts.AddRange(typeParameter.ConstraintTypes.Select(constraintType => constraintType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+
+            if (typeParameter.HasConstructorConstraint)
+                parts.Add("new()");
+
+            if (parts.Count == 0)
+                continue;
+
+            constraints.Add($"where {typeParameter.Name} : {string.Join(", ", parts)}");
+        }
+
+        return constraints;
     }
 
     private static string EscapeIdentifier(string name)

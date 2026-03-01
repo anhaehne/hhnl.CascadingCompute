@@ -11,7 +11,6 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
     {
         // Arrange
         var service = new AsyncInnerService();
-        service.CascadingCompute.InvalidateAll();
 
         // Act
         var first = await service.AddAsync(1, 2);
@@ -28,7 +27,6 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
     {
         // Arrange
         var service = new AsyncInnerService();
-        service.CascadingCompute.InvalidateAll();
 
         // Act
         var first = await service.AddAsync(2, 3);
@@ -47,8 +45,6 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
         // Arrange
         var inner = new AsyncInnerService();
         var outer = new AsyncOuterService(inner);
-        inner.CascadingCompute.InvalidateAll();
-        outer.CascadingCompute.InvalidateAll();
 
         // Act
         var first = await outer.AddTwiceAsync(1, 2);
@@ -66,8 +62,6 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
         // Arrange
         var inner = new AsyncInnerService();
         var outer = new AsyncOuterService(inner);
-        inner.CascadingCompute.InvalidateAll();
-        outer.CascadingCompute.InvalidateAll();
 
         // Act
         var first = await outer.AddTwiceAsync(1, 2);

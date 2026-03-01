@@ -179,7 +179,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         if (method.ReturnsVoid)
             return false;
 
-        if (method.IsStatic || method.IsGenericMethod)
+        if (method.IsStatic)
             return false;
 
         return method.Parameters.All(parameter => parameter.RefKind == RefKind.None);
@@ -279,16 +279,16 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         var cacheFields = new List<string>();
         foreach (var method in methods)
         {
-            var parameterTupleType = GetParameterTupleType(method);
+            var cacheKeyType = GetCacheKeyType(method);
             var fieldName = GetCacheFieldName(method);
             cacheFields.Add(fieldName);
             sb.Append(innerIndent);
-            sb.Append("private static readonly global::hhnl.CascadingCompute.Caching.ValueCache<");
+            sb.Append("private readonly global::hhnl.CascadingCompute.Caching.ValueCache<");
             sb.Append(GetContainingTypeName(typeSymbol));
             sb.Append(", ");
-            sb.Append(parameterTupleType);
+            sb.Append(cacheKeyType);
             sb.Append(", ");
-            sb.Append(method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+            sb.Append(GetCacheResultType(method));
             sb.Append('>');
             sb.Append(' ');
             sb.Append(fieldName);
@@ -296,8 +296,11 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.AppendLine();
 
             var parameters = GetParameterList(method);
-            var parameterTupleExpression = GetParameterTupleExpression(method);
+            var cacheKeyExpression = GetCacheKeyExpression(method);
             var methodAccessibility = GetAccessibility(method.DeclaredAccessibility);
+            var methodTypeParameters = GetMethodTypeParameters(method);
+            var methodConstraints = GetMethodConstraints(method);
+            var invocationTypeArguments = GetMethodTypeArguments(method);
 
             sb.Append(innerIndent);
             sb.Append(methodAccessibility);
@@ -305,18 +308,35 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
             sb.Append(' ');
             sb.Append(method.Name);
+            sb.Append(methodTypeParameters);
             sb.Append('(');
             sb.Append(parameters);
             sb.AppendLine(")");
+            foreach (var constraint in methodConstraints)
+            {
+                sb.Append(innerIndent);
+                sb.Append("    ");
+                sb.AppendLine(constraint);
+            }
             sb.Append(innerIndent);
             sb.AppendLine("{");
             sb.Append(innerIndent);
             sb.Append("    return ");
+            if (method.IsGenericMethod)
+            {
+                sb.Append('(');
+                sb.Append(method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                sb.Append(')');
+            }
             sb.Append(fieldName);
             sb.Append(".GetOrAdd(implementation, ");
-            sb.Append(parameterTupleExpression);
-            sb.Append(", static (s, p) => s.");
+            sb.Append(cacheKeyExpression);
+            sb.Append(", static (s, p) => ");
+            if (method.IsGenericMethod)
+                sb.Append("(object)");
+            sb.Append("s.");
             sb.Append(method.Name);
+            sb.Append(invocationTypeArguments);
             sb.Append('(');
             sb.Append(GetInvocationArguments(method));
             sb.AppendLine("));");
@@ -328,16 +348,23 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(methodAccessibility);
             sb.Append(" void Invalidate");
             sb.Append(method.Name);
+            sb.Append(methodTypeParameters);
             sb.Append('(');
             sb.Append(parameters);
             sb.AppendLine(")");
+            foreach (var constraint in methodConstraints)
+            {
+                sb.Append(innerIndent);
+                sb.Append("    ");
+                sb.AppendLine(constraint);
+            }
             sb.Append(innerIndent);
             sb.AppendLine("{");
             sb.Append(innerIndent);
             sb.Append("    ");
             sb.Append(fieldName);
             sb.Append(".Invalidate(");
-            sb.Append(parameterTupleExpression);
+            sb.Append(cacheKeyExpression);
             sb.AppendLine(");");
             sb.Append(innerIndent);
             sb.AppendLine("}");
@@ -382,27 +409,113 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         if (method.Parameters.Length == 0)
             return string.Empty;
 
-        return string.Join(", ", method.Parameters.Select(parameter => $"p.{EscapeIdentifier(parameter.Name)}"));
+        var usesTuple = GetCacheKeyElementCount(method) > 1;
+        return string.Join(", ", method.Parameters.Select(parameter => GetInvocationArgument(method, parameter, usesTuple)));
     }
 
-    private static string GetParameterTupleExpression(IMethodSymbol method)
+    private static string GetParameterTupleExpression(IReadOnlyList<string> elements)
     {
-        if (method.Parameters.Length == 0)
+        if (elements.Count == 0)
             return "default";
-
-        return $"({string.Join(", ", method.Parameters.Select(parameter => EscapeIdentifier(parameter.Name)))})";
-    }
-
-    private static string GetParameterTupleType(IMethodSymbol method)
-    {
-        if (method.Parameters.Length == 0)
-            return "global::System.ValueTuple";
-
-        var elements = method.Parameters
-            .Select(parameter => $"{parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)} {EscapeIdentifier(parameter.Name)}");
 
         return $"({string.Join(", ", elements)})";
     }
+
+    private static string GetParameterTupleType(IReadOnlyList<string> elements)
+    {
+        if (elements.Count == 0)
+            return "global::System.ValueTuple";
+
+        return $"({string.Join(", ", elements)})";
+    }
+
+    private static string GetCacheKeyExpression(IMethodSymbol method)
+    {
+        var elements = GetCacheKeyExpressionElements(method).ToList();
+        if (elements.Count == 0)
+            return "default";
+        if (elements.Count == 1)
+            return elements[0];
+
+        return GetParameterTupleExpression(elements);
+    }
+
+    private static string GetCacheKeyType(IMethodSymbol method)
+    {
+        var elementTypes = GetCacheKeyTypeElements(method, includeNames: false).ToList();
+        if (elementTypes.Count == 0)
+            return "global::System.ValueTuple";
+        if (elementTypes.Count == 1)
+            return elementTypes[0];
+
+        var namedElements = GetCacheKeyTypeElements(method, includeNames: true).ToList();
+        return GetParameterTupleType(namedElements);
+    }
+
+    private static IEnumerable<string> GetCacheKeyExpressionElements(IMethodSymbol method)
+    {
+        foreach (var typeSymbol in GetGenericMethodTypeSymbols(method))
+            yield return $"typeof({typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})";
+
+        foreach (var parameter in method.Parameters)
+        {
+            if (ContainsMethodTypeParameter(parameter.Type, method))
+                yield return $"(object){EscapeIdentifier(parameter.Name)}";
+            else
+                yield return EscapeIdentifier(parameter.Name);
+        }
+    }
+
+    private static IEnumerable<string> GetCacheKeyTypeElements(IMethodSymbol method, bool includeNames)
+    {
+        foreach (var _ in GetGenericMethodTypeSymbols(method))
+            yield return "global::System.Type";
+
+        foreach (var parameter in method.Parameters)
+        {
+            var typeName = ContainsMethodTypeParameter(parameter.Type, method)
+                ? "global::System.Object"
+                : parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (includeNames)
+                yield return $"{typeName} {EscapeIdentifier(parameter.Name)}";
+            else
+                yield return typeName;
+        }
+    }
+
+    private static int GetCacheKeyElementCount(IMethodSymbol method)
+        => method.TypeParameters.Length + method.Parameters.Length;
+
+    private static string GetInvocationArgument(IMethodSymbol method, IParameterSymbol parameter, bool usesTuple)
+    {
+        var expression = usesTuple ? $"p.{EscapeIdentifier(parameter.Name)}" : "p";
+        if (method.IsGenericMethod || ContainsMethodTypeParameter(parameter.Type, method))
+        {
+            var parameterType = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            return $"({parameterType}){expression}";
+        }
+
+        return expression;
+    }
+
+    private static bool ContainsMethodTypeParameter(ITypeSymbol typeSymbol, IMethodSymbol method)
+    {
+        if (typeSymbol is ITypeParameterSymbol typeParameter)
+            return SymbolEqualityComparer.Default.Equals(typeParameter.DeclaringMethod, method);
+
+        return typeSymbol switch
+        {
+            IArrayTypeSymbol arrayType => ContainsMethodTypeParameter(arrayType.ElementType, method),
+            INamedTypeSymbol namedType => namedType.TypeArguments.Any(arg => ContainsMethodTypeParameter(arg, method)),
+            _ => false
+        };
+    }
+
+    private static IEnumerable<ITypeSymbol> GetGenericMethodTypeSymbols(IMethodSymbol method)
+        => method.TypeParameters.Length > 0 ? method.TypeParameters : method.TypeArguments;
+
+    private static string GetCacheResultType(IMethodSymbol method)
+        => method.IsGenericMethod ? "global::System.Object" : method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
     private static string GetParameterList(IMethodSymbol method)
     {
@@ -418,11 +531,61 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         }));
     }
 
+    private static string GetMethodTypeParameters(IMethodSymbol method)
+    {
+        if (method.TypeParameters.Length == 0)
+            return string.Empty;
+
+        return $"<{string.Join(", ", method.TypeParameters.Select(parameter => parameter.Name))}>";
+    }
+
+    private static string GetMethodTypeArguments(IMethodSymbol method)
+    {
+        if (method.TypeParameters.Length == 0)
+            return string.Empty;
+
+        return $"<{string.Join(", ", method.TypeParameters.Select(parameter => parameter.Name))}>";
+    }
+
+    private static IReadOnlyList<string> GetMethodConstraints(IMethodSymbol method)
+    {
+        if (method.TypeParameters.Length == 0)
+            return Array.Empty<string>();
+
+        var constraints = new List<string>();
+        foreach (var typeParameter in method.TypeParameters)
+        {
+            var parts = new List<string>();
+            if (typeParameter.HasNotNullConstraint)
+                parts.Add("notnull");
+            if (typeParameter.HasReferenceTypeConstraint)
+                parts.Add(typeParameter.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated ? "class?" : "class");
+            if (typeParameter.HasUnmanagedTypeConstraint)
+                parts.Add("unmanaged");
+            if (typeParameter.HasValueTypeConstraint)
+                parts.Add("struct");
+
+            parts.AddRange(typeParameter.ConstraintTypes.Select(constraintType => constraintType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+
+            if (typeParameter.HasConstructorConstraint)
+                parts.Add("new()");
+
+            if (parts.Count == 0)
+                continue;
+
+            constraints.Add($"where {typeParameter.Name} : {string.Join(", ", parts)}");
+        }
+
+        return constraints;
+    }
+
     private static string GetCacheFieldName(IMethodSymbol method)
     {
         var typeSuffix = method.Parameters.Length == 0
             ? "NoArgs"
             : string.Concat(method.Parameters.Select(parameter => GetTypeNameForIdentifier(parameter.Type)));
+        if (method.IsGenericMethod)
+            typeSuffix += "Of" + string.Concat(method.TypeParameters.Select(parameter => parameter.Name));
         var methodName = method.Name.Length > 1
             ? method.Name.Substring(0, 1).ToLowerInvariant() + method.Name.Substring(1)
             : method.Name.ToLowerInvariant();
@@ -643,20 +806,40 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         foreach (var method in interfaceMethods)
         {
             var parameters = GetParameterList(method);
+            var methodTypeParameters = GetMethodTypeParameters(method);
+            var methodConstraints = GetMethodConstraints(method);
             sb.Append(memberIndent);
             sb.Append(method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
             sb.Append(' ');
             sb.Append(method.Name);
+            sb.Append(methodTypeParameters);
             sb.Append('(');
             sb.Append(parameters);
-            sb.AppendLine(");");
+            sb.AppendLine(")");
+            foreach (var constraint in methodConstraints)
+            {
+                sb.Append(memberIndent);
+                sb.Append("    ");
+                sb.AppendLine(constraint);
+            }
+            sb.Append(memberIndent);
+            sb.AppendLine(";");
 
             sb.Append(memberIndent);
             sb.Append("void Invalidate");
             sb.Append(method.Name);
+            sb.Append(methodTypeParameters);
             sb.Append('(');
             sb.Append(parameters);
-            sb.AppendLine(");");
+            sb.AppendLine(")");
+            foreach (var constraint in methodConstraints)
+            {
+                sb.Append(memberIndent);
+                sb.Append("    ");
+                sb.AppendLine(constraint);
+            }
+            sb.Append(memberIndent);
+            sb.AppendLine(";");
             sb.AppendLine();
         }
 
