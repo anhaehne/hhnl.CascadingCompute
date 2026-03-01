@@ -9,6 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\hhnl.CascadingCompute.Generators\hhnl.CascadingCompute.Generators.csproj" />
         <ProjectReference Include="..\hhnl.CascadingCompute.Shared\hhnl.CascadingCompute.Shared.csproj" />
     </ItemGroup>
 

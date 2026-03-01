@@ -3,8 +3,8 @@
     <PropertyGroup Condition="'$(IsPackable)' == 'true' and '$(Configuration)' == 'Debug'">
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageOutputPath>$(UserProfile)\.nuget\feed</PackageOutputPath>
-        <BuildId>$([System.DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff'))</BuildId>
-        <PackageVersion>$(VersionPrefix)-build$(BuildId)</PackageVersion>
+        <BuildRevision>$([System.DateTime]::UtcNow.ToString('MMddHHmm'))</BuildRevision>
+        <PackageVersion>$(VersionPrefix).$(BuildRevision)</PackageVersion>
     </PropertyGroup>
 
     <Target Name="CleanupOldLocalFeedPackages" AfterTargets="Build" Condition="'$(IsPackable)' == 'true' and '$(GeneratePackageOnBuild)' == 'true' and Exists('$(PackageOutputPath)')">
@@ -14,7 +14,7 @@
             <_OldPackageFiles Include="@(_AllPackageFiles)" Exclude="@(_CurrentPackageFiles)" />
         </ItemGroup>
 
-        <Delete Files="@(_OldPackageFiles)" />
+        <Delete Files="@(_OldPackageFiles)" TreatErrorsAsWarnings="true" ContinueOnError="WarnAndContinue" />
     </Target>
 
 </Project>
