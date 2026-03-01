@@ -1,0 +1,8 @@
+<Project InitialTargets="hhnl_CascadingCompute_Interceptors">
+  <Target Name="hhnl_CascadingCompute_Interceptors">
+    <PropertyGroup>
+      <InterceptorsNamespaces>$(InterceptorsNamespaces);hhnl.CascadingCompute.Interceptors</InterceptorsNamespaces>
+      <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);hhnl.CascadingCompute.Interceptors</InterceptorsPreviewNamespaces>
+    </PropertyGroup>
+  </Target>
+</Project>

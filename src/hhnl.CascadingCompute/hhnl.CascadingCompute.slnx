@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/Tests/">
+    <Project Path="TestProject/TestProject.csproj" />
+  </Folder>
+  <Project Path="hhnl.CascadingCompute.Generators/hhnl.CascadingCompute.Generators.csproj" Id="e0329cb2-4e3c-4eda-bdec-e0a915dd9388" />
+  <Project Path="hhnl.CascadingCompute.Shared/hhnl.CascadingCompute.Shared.csproj" Id="1c9d1f58-1d25-4167-875b-925e5d098563" />
+  <Project Path="hhnl.CascadingCompute.Tests/hhnl.CascadingCompute.Tests.csproj" Id="10033222-3b0d-4dfb-90d6-c924b07ed096" />
+  <Project Path="hhnl.CascadingCompute/hhnl.CascadingCompute.csproj" />
+</Solution>
