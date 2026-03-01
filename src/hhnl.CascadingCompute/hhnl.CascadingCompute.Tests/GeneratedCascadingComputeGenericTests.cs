@@ -24,6 +24,24 @@ public sealed partial class GeneratedCascadingComputeGenericTests
     }
 
     [TestMethod]
+    public void Cascading_compute_should_cache_nullable_generic_call_result()
+    {
+        // Arrange
+        var service = new GenericService();
+
+        // Act
+        var first = service.CascadingCompute.Echo<string?>(null);
+        var second = service.CascadingCompute.Echo<string?>(null);
+
+        // Assert
+        Assert.IsNull(first);
+        Assert.IsNull(second);
+        CollectionAssert.AreEqual(
+            new[] { (typeof(string), (object?)null) },
+            service.Calls.ToArray());
+    }
+
+    [TestMethod]
     public void Cascading_compute_should_recompute_after_generic_cache_invalidation()
     {
         // Arrange
@@ -117,23 +135,23 @@ public sealed partial class GeneratedCascadingComputeGenericTests
 
     public sealed partial class GenericService
     {
-        private readonly List<(Type type, object value)> _calls = [];
-        private readonly List<(Type leftType, Type rightType, object leftValue, object rightValue)> _pairCalls = [];
+        private readonly List<(Type type, object? value)> _calls = [];
+        private readonly List<(Type leftType, Type rightType, object? leftValue, object? rightValue)> _pairCalls = [];
 
-        public IReadOnlyList<(Type type, object value)> Calls => _calls;
-        public IReadOnlyList<(Type leftType, Type rightType, object leftValue, object rightValue)> PairCalls => _pairCalls;
+        public IReadOnlyList<(Type type, object? value)> Calls => _calls;
+        public IReadOnlyList<(Type leftType, Type rightType, object? leftValue, object? rightValue)> PairCalls => _pairCalls;
 
         [CascadingCompute]
         public T Echo<T>(T value)
         {
-            _calls.Add((typeof(T), value!));
+            _calls.Add((typeof(T), value));
             return value;
         }
 
         [CascadingCompute]
         public (TLeft Left, TRight Right) Pair<TLeft, TRight>(TLeft left, TRight right)
         {
-            _pairCalls.Add((typeof(TLeft), typeof(TRight), left!, right!));
+            _pairCalls.Add((typeof(TLeft), typeof(TRight), left, right));
             return (left, right);
         }
     }

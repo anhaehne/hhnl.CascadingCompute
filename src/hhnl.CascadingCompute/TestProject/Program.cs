@@ -1,6 +1,6 @@
 ﻿using Test;
 
-TestProgram2.Main();
+TestProgram2.Run();
 
 
 

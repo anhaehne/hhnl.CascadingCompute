@@ -4,7 +4,7 @@ namespace Test;
 
 class TestProgram2
 {
-    public static void Main()
+    public static void Run()
     {
         var serviceInner = new ServiceInner();
         var serviceOuter = new ServiceOuter(serviceInner);
@@ -15,9 +15,6 @@ class TestProgram2
         serviceInner.InvalidateAdd(1, 2);
 
         var result3 = serviceOuter.AddTwice(1, 2);
-
-        var x = 0;
-
     }
 }
 
