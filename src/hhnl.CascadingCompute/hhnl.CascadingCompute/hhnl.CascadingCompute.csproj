@@ -9,16 +9,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\hhnl.CascadingCompute.Generators\hhnl.CascadingCompute.Generators.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+        <ProjectReference Include="..\hhnl.CascadingCompute.Generators\hhnl.CascadingCompute.Generators.csproj" PrivateAssets="none" IncludeAssets="build;buildTransitive;analyzers" />
         <ProjectReference Include="..\hhnl.CascadingCompute.Shared\hhnl.CascadingCompute.Shared.csproj" />
     </ItemGroup>
-
-    <ItemGroup>
-        <None Include="..\hhnl.CascadingCompute.Generators\bin\$(Configuration)\netstandard2.0\hhnl.CascadingCompute.Generators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" Condition="Exists('..\hhnl.CascadingCompute.Generators\bin\$(Configuration)\netstandard2.0\hhnl.CascadingCompute.Generators.dll')" />
-        <None Include="..\hhnl.CascadingCompute.Generators\bin\$(Configuration)\netstandard2.0\hhnl.CascadingCompute.Generators.pdb" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" Condition="Exists('..\hhnl.CascadingCompute.Generators\bin\$(Configuration)\netstandard2.0\hhnl.CascadingCompute.Generators.pdb')" />
-        <None Include="..\hhnl.CascadingCompute.Generators\hhnl.CascadingCompute.Generators.targets" Pack="true" PackagePath="buildTransitive" Visible="true" />
-    </ItemGroup>
-
-    <Import Project="..\hhnl.CascadingCompute.Packaging.targets" />
 
 </Project>
