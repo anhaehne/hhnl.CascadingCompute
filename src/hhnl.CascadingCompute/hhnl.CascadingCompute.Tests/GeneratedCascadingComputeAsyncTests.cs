@@ -103,7 +103,7 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
 
         // Assert
         Assert.IsNull(first);
-        Assert.IsNull(second);
+        Assert.AreEqual(first, second);
         CollectionAssert.AreEqual(new string?[] { null }, service.Calls.ToArray());
     }
 

@@ -101,15 +101,16 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         // Arrange
         var service = new NullableInterfaceService();
         INullableInterfaceService viaInterface = service;
+        string? value = "nullable";
 
         // Act
-        var first = viaInterface.Echo(null);
-        var second = viaInterface.Echo(null);
+        var first = viaInterface.Echo(value);
+        var second = viaInterface.Echo(value);
 
         // Assert
-        Assert.IsNull(first);
-        Assert.IsNull(second);
-        CollectionAssert.AreEqual(new string?[] { null }, service.Calls.ToArray());
+        Assert.AreEqual(value, first);
+        Assert.AreEqual(first, second);
+        CollectionAssert.AreEqual(new[] { value }, service.Calls.ToArray());
     }
 
     [TestMethod]

@@ -327,6 +327,8 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         sb.Append("private readonly ");
         sb.Append(GetContainingTypeName(typeSymbol));
         sb.AppendLine(" _implementation = implementation;");
+        sb.Append(innerIndent);
+        sb.AppendLine("private static readonly object __nullKey = new();");
         sb.AppendLine();
 
         var cacheFields = new List<string>();
@@ -373,11 +375,14 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             var parameters = GetParameterList(method);
             var invalidateParameters = GetParameterList(includedParameters);
             var cacheKeyExpression = GetCacheKeyExpression(method, includedParameters).Replace("implementation.", "_implementation.");
-            var invalidationCacheKeyExpression = cacheKeyExpression.Replace("_implementation.", "cascadingCompute._implementation.");
+            var invalidationCacheKeyExpression = cacheKeyExpression
+                .Replace("_implementation.", "cascadingCompute._implementation.")
+                .Replace("__nullKey", "CascadingComputeWrapper.__nullKey");
             var invocationArguments = GetInvocationArguments(method, includedParameters);
             var predicateIncludeContext = interfaceSymbol is null;
             var predicateDelegateType = GetPredicateDelegateType(method, includedParameters, predicateIncludeContext);
             var predicateInvocationArguments = GetPredicateInvocationArguments(method, includedParameters, predicateIncludeContext);
+            var invalidationPredicateInvocationArguments = predicateInvocationArguments.Replace("__nullKey", "CascadingComputeWrapper.__nullKey");
             var useStaticFactory = includedParameters.Count == method.Parameters.Length;
             var methodAccessibility = GetAccessibility(method.DeclaredAccessibility);
             var methodTypeParameters = GetMethodTypeParameters(method);
@@ -516,7 +521,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             else
             {
                 invalidationMembers.Append("predicate(");
-                invalidationMembers.Append(predicateInvocationArguments);
+                invalidationMembers.Append(invalidationPredicateInvocationArguments);
                 invalidationMembers.Append(')');
             }
             invalidationMembers.AppendLine(");");
@@ -623,6 +628,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     {
         var parameterType = parameter.Type.ToDisplayString(NullableFullyQualifiedFormat);
         var expression = usesTuple ? $"p.{EscapeIdentifier(parameter.Name)}" : "p";
+        if (IsNullableReferenceType(parameter.Type))
+            return $"global::System.Object.ReferenceEquals({expression}, __nullKey) ? null : ({parameterType}){expression}!";
+
         if (method.IsGenericMethod || ContainsTypeParameter(parameter.Type) || IsNullableReferenceType(parameter.Type))
             return $"({parameterType}){expression}!";
 
@@ -677,6 +685,8 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         {
             if (ContainsTypeParameter(parameter.Type))
                 yield return $"((object){EscapeIdentifier(parameter.Name)})!";
+            else if (IsNullableReferenceType(parameter.Type))
+                yield return $"((object?){EscapeIdentifier(parameter.Name)}) ?? __nullKey";
             else
                 yield return EscapeIdentifier(parameter.Name);
         }
@@ -720,6 +730,12 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             return EscapeIdentifier(parameter.Name);
 
         var expression = usesTuple ? $"p.{EscapeIdentifier(parameter.Name)}" : "p";
+        if (IsNullableReferenceType(parameter.Type))
+        {
+            var parameterType = parameter.Type.ToDisplayString(NullableFullyQualifiedFormat);
+            return $"global::System.Object.ReferenceEquals({expression}, __nullKey) ? null : ({parameterType}){expression}!";
+        }
+
         if (method.IsGenericMethod || ContainsTypeParameter(parameter.Type) || IsNullableReferenceType(parameter.Type))
         {
             var parameterType = parameter.Type.ToDisplayString(NullableFullyQualifiedFormat);
