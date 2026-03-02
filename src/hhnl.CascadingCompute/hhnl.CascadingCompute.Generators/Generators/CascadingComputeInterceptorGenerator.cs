@@ -46,13 +46,17 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
         if (filePath is null || string.IsNullOrWhiteSpace(filePath) || IsGeneratedFile(filePath))
             return null;
 
+        var mappedLineSpan = location.GetMappedLineSpan();
+        var sourcePath = string.IsNullOrWhiteSpace(mappedLineSpan.Path) ? filePath : mappedLineSpan.Path;
+        var sourceLineNumber = mappedLineSpan.StartLinePosition.Line + 1;
+
 #pragma warning disable RSEXPERIMENTAL002
         var interceptableLocation = context.SemanticModel.GetInterceptableLocation(invocation);
 #pragma warning restore RSEXPERIMENTAL002
         if (interceptableLocation is null)
             return null;
 
-        return new InvocationCandidate(methodSymbol, interceptableLocation);
+        return new InvocationCandidate(methodSymbol, interceptableLocation, sourcePath, sourceLineNumber);
     }
 
     private static void Execute(SourceProductionContext context, ImmutableArray<InvocationCandidate> candidates)
@@ -102,6 +106,7 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
             var arguments = string.Join(", ", methodSymbol.Parameters.Select(parameter => EscapeIdentifier(parameter.Name)));
             var interceptorName = GetInterceptorName(methodName, index++);
 
+            sb.AppendLine($"        // Source: {NormalizeCommentText(candidate.SourcePath)}:{candidate.SourceLineNumber}");
             sb.AppendLine($"        [global::System.Runtime.CompilerServices.InterceptsLocationAttribute({location.Version}, {SymbolDisplay.FormatLiteral(location.Data, true)})]");
             sb.Append("        public static ");
             sb.Append(returnType);
@@ -331,6 +336,9 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
         return $"Intercept_{safeName}_{index}";
     }
 
+    private static string NormalizeCommentText(string value)
+        => value.Replace("\r", " ").Replace("\n", " ");
+
     private static bool IsGeneratedFile(string filePath)
         => filePath.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
            || filePath.EndsWith(".designer.cs", StringComparison.OrdinalIgnoreCase)
@@ -351,14 +359,20 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
 
     private sealed class InvocationCandidate
     {
-        public InvocationCandidate(IMethodSymbol method, InterceptableLocation location)
+        public InvocationCandidate(IMethodSymbol method, InterceptableLocation location, string sourcePath, int sourceLineNumber)
         {
             Method = method;
             Location = location;
+            SourcePath = sourcePath;
+            SourceLineNumber = sourceLineNumber;
         }
 
         public IMethodSymbol Method { get; }
 
         public InterceptableLocation Location { get; }
+
+        public string SourcePath { get; }
+
+        public int SourceLineNumber { get; }
     }
 }
