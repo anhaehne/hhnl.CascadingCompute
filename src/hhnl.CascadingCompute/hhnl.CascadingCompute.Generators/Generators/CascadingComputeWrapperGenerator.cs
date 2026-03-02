@@ -275,6 +275,20 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
+        var primaryConstructorCacheContexts = GetPrimaryConstructorCacheContextParameters(typeSymbol);
+        foreach (var primaryConstructorCacheContext in primaryConstructorCacheContexts)
+        {
+            sb.Append(indent);
+            sb.Append("private ");
+            sb.Append(primaryConstructorCacheContext.ContextTypeName);
+            sb.Append(' ');
+            sb.Append(primaryConstructorCacheContext.HelperMethodName);
+            sb.Append("() => ");
+            sb.Append(EscapeIdentifier(primaryConstructorCacheContext.ParameterName));
+            sb.AppendLine(".GetCacheContext();");
+            sb.AppendLine();
+        }
+
         sb.Append(indent);
         sb.Append("public class CascadingComputeWrapper(");
         sb.Append(GetContainingTypeName(typeSymbol));
@@ -724,7 +738,45 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             }
         }
 
+        foreach (var primaryConstructorCacheContext in GetPrimaryConstructorCacheContextParameters(method.ContainingType))
+        {
+            elements.Add(new CacheContextElement(
+                $"cacheContext{index++}",
+                $"implementation.{primaryConstructorCacheContext.HelperMethodName}()",
+                primaryConstructorCacheContext.ContextTypeName));
+        }
+
         return elements;
+    }
+
+    private static IReadOnlyList<PrimaryConstructorCacheContextParameter> GetPrimaryConstructorCacheContextParameters(INamedTypeSymbol typeSymbol)
+    {
+        if (typeSymbol.TypeKind != TypeKind.Class)
+            return [];
+
+        var primaryConstructor = typeSymbol.InstanceConstructors
+            .FirstOrDefault(ctor => ctor.DeclaringSyntaxReferences
+                .Select(reference => reference.GetSyntax())
+                .OfType<ClassDeclarationSyntax>()
+                .Any(classDeclaration => classDeclaration.ParameterList is not null));
+
+        if (primaryConstructor is null)
+            return [];
+
+        var parameters = new List<PrimaryConstructorCacheContextParameter>();
+        var index = 0;
+        foreach (var parameter in primaryConstructor.Parameters)
+        {
+            if (!TryGetCacheContextType(parameter.Type, out var cacheContextType))
+                continue;
+
+            parameters.Add(new PrimaryConstructorCacheContextParameter(
+                parameter.Name,
+                cacheContextType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                $"__GetPrimaryConstructorCacheContext{index++}"));
+        }
+
+        return parameters;
     }
 
     private static bool TryGetCacheContextType(ITypeSymbol typeSymbol, out ITypeSymbol cacheContextType)
@@ -756,6 +808,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             && typeSymbol.ContainingNamespace.ToDisplayString() == CacheContextProviderInterfaceNamespace;
 
     private sealed record CacheContextElement(string Name, string Expression, string TypeName);
+    private sealed record PrimaryConstructorCacheContextParameter(string ParameterName, string ContextTypeName, string HelperMethodName);
 
     private static IReadOnlyList<IParameterSymbol> GetIncludedParameters(IMethodSymbol method)
     {
