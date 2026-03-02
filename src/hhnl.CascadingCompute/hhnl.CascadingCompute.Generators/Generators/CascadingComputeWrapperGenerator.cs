@@ -521,33 +521,6 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             invalidationMembers.AppendLine("}");
             invalidationMembers.AppendLine();
 
-            if (includedParameters.Count > 0)
-            {
-                invalidationMembers.Append(invalidationInnerIndent);
-                invalidationMembers.Append("/// <summary>");
-                invalidationMembers.AppendLine();
-                invalidationMembers.Append(invalidationInnerIndent);
-                invalidationMembers.Append("/// Invalidates all cached results of ");
-                invalidationMembers.Append(method.Name);
-                invalidationMembers.AppendLine(".");
-                invalidationMembers.Append(invalidationInnerIndent);
-                invalidationMembers.Append("/// </summary>");
-                invalidationMembers.AppendLine();
-                invalidationMembers.Append(invalidationInnerIndent);
-                invalidationMembers.Append(methodAccessibility);
-                invalidationMembers.Append(" void Invalidate");
-                invalidationMembers.Append(method.Name);
-                invalidationMembers.AppendLine("()");
-                invalidationMembers.Append(invalidationInnerIndent);
-                invalidationMembers.AppendLine("{");
-                invalidationMembers.Append(invalidationInnerIndent);
-                invalidationMembers.Append("    cascadingCompute.");
-                invalidationMembers.Append(fieldName);
-                invalidationMembers.AppendLine(".InvalidateAll();");
-                invalidationMembers.Append(invalidationInnerIndent);
-                invalidationMembers.AppendLine("}");
-                invalidationMembers.AppendLine();
-            }
         }
 
         sb.Append(innerIndent);

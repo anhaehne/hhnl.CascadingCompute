@@ -11,7 +11,6 @@ When a method is marked with `[CascadingCompute]`, source generators create:
 - cached method calls
 - `Invalidate<MethodName>(...)` methods on `Invalidation`
 - `Invalidate<MethodName>(Func<..., bool> predicate)` methods on `Invalidation`
-- `Invalidate<MethodName>()` methods on `Invalidation` (generated only when `Invalidate<MethodName>(...)` has parameters)
 - `InvalidateAll()` on `Invalidation`
 
 The library also supports cascading invalidation through `ValueCache` dependencies.

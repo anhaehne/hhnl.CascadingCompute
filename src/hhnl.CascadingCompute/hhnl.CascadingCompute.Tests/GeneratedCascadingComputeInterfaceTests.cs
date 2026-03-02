@@ -41,25 +41,6 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     }
 
     [TestMethod]
-    public void Cascading_compute_should_recompute_all_interface_entries_for_method_after_method_wide_invalidation()
-    {
-        // Arrange
-        var inner = new InterfaceInner();
-        IInterfaceInner service = inner;
-
-        // Act
-        _ = service.Add(2, 3);
-        _ = service.Add(4, 5);
-        _ = service.Add(2, 3);
-        service.InvalidateAdd();
-        _ = service.Add(2, 3);
-        _ = service.Add(4, 5);
-
-        // Assert
-        CollectionAssert.AreEqual(new[] { (2, 3), (4, 5), (2, 3), (4, 5) }, inner.Calls.ToArray());
-    }
-
-    [TestMethod]
     public void Cascading_compute_should_recompute_interface_entries_matching_predicate_invalidation()
     {
         // Arrange
@@ -202,7 +183,6 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
 
         void InvalidateAdd(Func<int, int, bool> predicate);
 
-        void InvalidateAdd();
     }
 
     public sealed partial class InterfaceInner : IInterfaceInner
@@ -223,8 +203,6 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         public void InvalidateAdd(Func<int, int, bool> predicate)
             => Invalidation.InvalidateAdd(predicate);
 
-        public void InvalidateAdd()
-            => Invalidation.InvalidateAdd();
     }
 
     public sealed partial class InterfaceOuter
