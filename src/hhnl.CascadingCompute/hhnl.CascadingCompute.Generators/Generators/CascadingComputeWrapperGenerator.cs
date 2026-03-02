@@ -369,8 +369,8 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
             var parameters = GetParameterList(method);
             var invalidateParameters = GetParameterList(includedParameters);
-            var cacheKeyExpression = GetCacheKeyExpression(method, includedParameters);
-            var invalidationCacheKeyExpression = cacheKeyExpression.Replace("implementation.", "cascadingCompute._implementation.");
+            var cacheKeyExpression = GetCacheKeyExpression(method, includedParameters).Replace("implementation.", "_implementation.");
+            var invalidationCacheKeyExpression = cacheKeyExpression.Replace("_implementation.", "cascadingCompute._implementation.");
             var invocationArguments = GetInvocationArguments(method, includedParameters);
             var predicateIncludeContext = interfaceSymbol is null;
             var predicateDelegateType = GetPredicateDelegateType(method, includedParameters, predicateIncludeContext);
@@ -408,7 +408,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
                 sb.Append(')');
             }
             sb.Append(fieldName);
-            sb.Append(".GetOrAdd(implementation, ");
+            sb.Append(".GetOrAdd(_implementation, ");
             sb.Append(cacheKeyExpression);
             sb.Append(", ");
             if (useStaticFactory)
