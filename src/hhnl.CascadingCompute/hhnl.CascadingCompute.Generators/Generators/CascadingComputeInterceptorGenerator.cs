@@ -305,7 +305,9 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
             return string.Empty;
 
         if (parameter.ExplicitDefaultValue is null)
-            return "null";
+            return parameter.Type.IsValueType
+                ? $"default({parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})"
+                : "null";
 
         if (parameter.Type.TypeKind == TypeKind.Enum && parameter.Type is INamedTypeSymbol enumType)
         {

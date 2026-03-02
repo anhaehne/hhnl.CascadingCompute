@@ -1,4 +1,4 @@
-﻿namespace hhnl.CascadingCompute.Collections;
+﻿namespace System.Linq;
 
 public class EquatableSet<T> : HashSet<T>
 {
@@ -37,4 +37,11 @@ public class EquatableSet<T> : HashSet<T>
     {
         return !(left == right);
     }
+}
+
+
+public static class EquatableSetExtensions
+{
+    public static EquatableSet<T> ToEquatableSet<T>(this IEnumerable<T> source)
+        => new(source);
 }

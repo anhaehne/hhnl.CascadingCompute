@@ -348,7 +348,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             var cacheKeyExpression = GetCacheKeyExpression(method, includedParameters);
             var invocationArguments = GetInvocationArguments(method, includedParameters);
             var predicateIncludeContext = interfaceSymbol is null;
-            var predicateDelegateType = GetPredicateDelegateType(method, predicateIncludeContext);
+            var predicateDelegateType = GetPredicateDelegateType(method, includedParameters, predicateIncludeContext);
             var predicateInvocationArguments = GetPredicateInvocationArguments(method, includedParameters, predicateIncludeContext);
             var useStaticFactory = includedParameters.Count == method.Parameters.Length;
             var methodAccessibility = GetAccessibility(method.DeclaredAccessibility);
@@ -523,13 +523,13 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         return string.Join(", ", method.Parameters.Select(parameter => GetInvocationArgument(method, parameter, usesTuple, includedParameterNames.Contains(parameter.Name))));
     }
 
-    private static string GetPredicateDelegateType(IMethodSymbol method, bool includeCacheContext)
+    private static string GetPredicateDelegateType(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters, bool includeCacheContext)
     {
         var contextElements = includeCacheContext ? GetCacheContextElements(method) : [];
-        if (method.Parameters.Length == 0 && contextElements.Count == 0)
+        if (includedParameters.Count == 0 && contextElements.Count == 0)
             return "global::System.Func<bool>";
 
-        var typeArguments = method.Parameters
+        var typeArguments = includedParameters
             .Select(parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
             .Concat(contextElements.Select(contextElement => contextElement.TypeName))
             .Concat(["bool"]);
@@ -540,13 +540,12 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     private static string GetPredicateInvocationArguments(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters, bool includeCacheContext)
     {
         var contextElements = includeCacheContext ? GetCacheContextElements(method) : [];
-        if (method.Parameters.Length == 0 && contextElements.Count == 0)
+        if (includedParameters.Count == 0 && contextElements.Count == 0)
             return string.Empty;
 
         var arguments = new List<string>();
-        var includedParameterNames = new HashSet<string>(includedParameters.Select(parameter => parameter.Name), StringComparer.Ordinal);
         var usesTuple = GetCacheKeyElementCount(method, includedParameters) > 1;
-        arguments.AddRange(method.Parameters.Select(parameter => GetPredicateInvocationArgument(method, parameter, usesTuple, includedParameterNames.Contains(parameter.Name))));
+        arguments.AddRange(includedParameters.Select(parameter => GetPredicateInvocationArgument(method, parameter, usesTuple)));
 
         if (contextElements.Count > 0)
         {
@@ -563,12 +562,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         return string.Join(", ", arguments);
     }
 
-    private static string GetPredicateInvocationArgument(IMethodSymbol method, IParameterSymbol parameter, bool usesTuple, bool isIncludedInCacheKey)
+    private static string GetPredicateInvocationArgument(IMethodSymbol method, IParameterSymbol parameter, bool usesTuple)
     {
         var parameterType = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        if (!isIncludedInCacheKey)
-            return $"default({parameterType})";
-
         var expression = usesTuple ? $"p.{EscapeIdentifier(parameter.Name)}" : "p";
         if (method.IsGenericMethod || ContainsTypeParameter(parameter.Type))
             return $"({parameterType}){expression}!";
@@ -1290,7 +1286,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             return string.Empty;
 
         if (parameter.ExplicitDefaultValue is null)
-            return "null";
+            return parameter.Type.IsValueType
+                ? $"default({parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})"
+                : "null";
 
         if (parameter.Type.TypeKind == TypeKind.Enum && parameter.Type is INamedTypeSymbol enumType)
         {
@@ -1453,7 +1451,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(method.Name);
             sb.Append(methodTypeParameters);
             sb.Append("(");
-            sb.Append(GetPredicateDelegateType(method, includeCacheContext: false));
+            sb.Append(GetPredicateDelegateType(method, includedParameters, includeCacheContext: false));
             sb.AppendLine(" predicate)");
             foreach (var constraint in methodConstraints)
             {

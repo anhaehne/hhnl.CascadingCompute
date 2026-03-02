@@ -41,6 +41,24 @@ public sealed partial class GeneratedCascadingComputeIgnoreParameterAttributeTes
     }
 
     [TestMethod]
+    public void Ignore_parameter_attribute_should_exclude_ignored_parameter_from_predicate_invalidate_signature()
+    {
+        // Arrange
+        var service = new MethodLevelIgnoreParameterService();
+
+        // Act
+        _ = service.Combine(1, "A");
+        _ = service.Combine(1, "B");
+        _ = service.Combine(2, "X");
+        service.CascadingCompute.InvalidateCombine(id => id == 1);
+        _ = service.Combine(1, "C");
+        _ = service.Combine(2, "Y");
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { (1, "A"), (2, "X"), (1, "C") }, service.Calls.ToArray());
+    }
+
+    [TestMethod]
     public void Ignore_parameter_attribute_on_type_should_exclude_matching_type_from_cache_key_and_invalidate_signature()
     {
         // Arrange

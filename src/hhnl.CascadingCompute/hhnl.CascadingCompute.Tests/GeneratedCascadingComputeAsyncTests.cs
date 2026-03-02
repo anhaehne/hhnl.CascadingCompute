@@ -73,6 +73,24 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
         CollectionAssert.AreEqual(new[] { (1, 2), (3, 2), (1, 2) }, inner.Calls.ToArray());
     }
 
+    [TestMethod]
+    public async Task Cascading_compute_should_intercept_async_optional_cancellation_token_parameter()
+    {
+        // Arrange
+        var service = new AsyncOptionalCancellationTokenService();
+        using var cancellationTokenSource = new CancellationTokenSource();
+
+        // Act
+        var first = await service.GetAsync(5);
+        var second = await service.GetAsync(5, cancellationTokenSource.Token);
+
+        // Assert
+        Assert.AreEqual(5, first);
+        Assert.AreEqual(first, second);
+        Assert.AreEqual(1, service.Calls.Count);
+        Assert.AreEqual(default, service.Calls[0].token);
+    }
+
     public sealed partial class AsyncInnerService
     {
         private readonly List<(int a, int b)> _calls = [];
@@ -106,6 +124,21 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
             _calls.Add((a, b));
             var first = await _inner.AddAsync(a, b);
             return await _inner.AddAsync(first, b);
+        }
+    }
+
+    public sealed partial class AsyncOptionalCancellationTokenService
+    {
+        private readonly List<(int value, CancellationToken token)> _calls = [];
+
+        public IReadOnlyList<(int value, CancellationToken token)> Calls => _calls;
+
+        [CascadingCompute]
+        public async Task<int> GetAsync(int value, CancellationToken cancellationToken = default)
+        {
+            _calls.Add((value, cancellationToken));
+            await Task.Yield();
+            return value;
         }
     }
 }
