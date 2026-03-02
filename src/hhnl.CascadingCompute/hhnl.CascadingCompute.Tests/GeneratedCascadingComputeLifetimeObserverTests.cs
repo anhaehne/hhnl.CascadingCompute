@@ -16,7 +16,7 @@ public sealed partial class GeneratedCascadingComputeLifetimeObserverTests
         // Act
         _ = service.GetValue(5);
         _ = service.GetValue(5);
-        service.CascadingCompute.InvalidateGetValue(5);
+        service.InvalidateGetValue(5);
 
         // Assert
         Assert.AreEqual(1, ClassLifetimeObserverAttribute.CreatedCount);
@@ -46,6 +46,9 @@ public sealed partial class GeneratedCascadingComputeLifetimeObserverTests
         [ClassLifetimeObserver]
         public int GetValue(int value)
             => value;
+
+        public void InvalidateGetValue(int value)
+            => Invalidation.InvalidateGetValue(value);
     }
 
     public partial interface IObservedInterface
@@ -63,7 +66,7 @@ public sealed partial class GeneratedCascadingComputeLifetimeObserverTests
             => value;
 
         public void InvalidateGetValue(int value)
-            => CascadingCompute.InvalidateGetValue(value);
+            => Invalidation.InvalidateGetValue(value);
     }
 
     [AttributeUsage(AttributeTargets.Method)]

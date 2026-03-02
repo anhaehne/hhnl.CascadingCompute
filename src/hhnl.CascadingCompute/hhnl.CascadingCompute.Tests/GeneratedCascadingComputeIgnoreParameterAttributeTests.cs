@@ -17,7 +17,7 @@ public sealed partial class GeneratedCascadingComputeIgnoreParameterAttributeTes
         // Act
         _ = service.Compose(11, new AssemblyIgnoredMarker("north"));
         _ = service.Compose(11, new AssemblyIgnoredMarker("south"));
-        service.CascadingCompute.InvalidateCompose(11);
+        service.InvalidateCompose(11);
         _ = service.Compose(11, new AssemblyIgnoredMarker("west"));
 
         // Assert
@@ -33,7 +33,7 @@ public sealed partial class GeneratedCascadingComputeIgnoreParameterAttributeTes
         // Act
         _ = service.Combine(1, "A");
         _ = service.Combine(1, "B");
-        service.CascadingCompute.InvalidateCombine(1);
+        service.InvalidateCombine(1);
         _ = service.Combine(1, "C");
 
         // Assert
@@ -50,7 +50,7 @@ public sealed partial class GeneratedCascadingComputeIgnoreParameterAttributeTes
         _ = service.Combine(1, "A");
         _ = service.Combine(1, "B");
         _ = service.Combine(2, "X");
-        service.CascadingCompute.InvalidateCombine(id => id == 1);
+        service.InvalidateCombine(id => id == 1);
         _ = service.Combine(1, "C");
         _ = service.Combine(2, "Y");
 
@@ -67,7 +67,7 @@ public sealed partial class GeneratedCascadingComputeIgnoreParameterAttributeTes
         // Act
         _ = service.Compose("north", 7);
         _ = service.Compose("south", 7);
-        service.CascadingCompute.InvalidateCompose(7);
+        service.InvalidateCompose(7);
         _ = service.Compose("west", 7);
 
         // Assert
@@ -103,6 +103,12 @@ public sealed partial class GeneratedCascadingComputeIgnoreParameterAttributeTes
             _calls.Add((id, label));
             return id + label.Length;
         }
+
+        public void InvalidateCombine(int id)
+            => Invalidation.InvalidateCombine(id);
+
+        public void InvalidateCombine(Func<int, bool> predicate)
+            => Invalidation.InvalidateCombine(predicate);
     }
 
     public sealed partial class AssemblyLevelIgnoreParameterService
@@ -117,6 +123,9 @@ public sealed partial class GeneratedCascadingComputeIgnoreParameterAttributeTes
             _calls.Add((id, marker.Value));
             return id + marker.Value.Length;
         }
+
+        public void InvalidateCompose(int id)
+            => Invalidation.InvalidateCompose(id);
     }
 
     [CascadingComputeIgnoreParameter(typeof(string))]
@@ -132,6 +141,9 @@ public sealed partial class GeneratedCascadingComputeIgnoreParameterAttributeTes
             _calls.Add((region, id));
             return id + region.Length;
         }
+
+        public void InvalidateCompose(int id)
+            => Invalidation.InvalidateCompose(id);
     }
 
     [CascadingComputeIgnoreParameter("label")]
@@ -156,7 +168,7 @@ public sealed partial class GeneratedCascadingComputeIgnoreParameterAttributeTes
         }
 
         public void InvalidateCompute(int id)
-            => CascadingCompute.InvalidateCompute(id);
+            => Invalidation.InvalidateCompute(id);
     }
 }
 

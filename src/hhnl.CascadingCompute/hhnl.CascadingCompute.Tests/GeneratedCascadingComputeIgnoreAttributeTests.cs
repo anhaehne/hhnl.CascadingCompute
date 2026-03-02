@@ -31,7 +31,7 @@ public sealed partial class GeneratedCascadingComputeIgnoreAttributeTests
         // Act
         _ = service.Combine(1, "A");
         _ = service.Combine(1, "B");
-        service.CascadingCompute.InvalidateCombine(1);
+        service.InvalidateCombine(1);
         _ = service.Combine(1, "C");
 
         // Assert
@@ -50,6 +50,9 @@ public sealed partial class GeneratedCascadingComputeIgnoreAttributeTests
             _calls.Add((id, label));
             return id + label.Length;
         }
+
+        public void InvalidateCombine(int id)
+            => Invalidation.InvalidateCombine(id);
     }
 
     public partial interface IInterfaceParameterIgnoreService
@@ -73,7 +76,7 @@ public sealed partial class GeneratedCascadingComputeIgnoreAttributeTests
         }
 
         public void InvalidateCombine(int id)
-            => CascadingCompute.InvalidateCombine(id);
+            => Invalidation.InvalidateCombine(id);
     }
 
 }

@@ -29,7 +29,7 @@ public sealed partial class GeneratedCascadingComputeTests
 
         // Act
         var first = service.Add(2, 3);
-        service.CascadingCompute.InvalidateAdd(2, 3);
+        service.InvalidateAdd(2, 3);
         var second = service.Add(2, 3);
 
         // Assert
@@ -48,7 +48,7 @@ public sealed partial class GeneratedCascadingComputeTests
         _ = service.Add(2, 3);
         _ = service.Add(4, 5);
         _ = service.Add(2, 3);
-        service.CascadingCompute.InvalidateAllAdd();
+        service.InvalidateAdd();
         _ = service.Add(2, 3);
         _ = service.Add(4, 5);
 
@@ -67,7 +67,7 @@ public sealed partial class GeneratedCascadingComputeTests
         _ = service.Add(4, 5);
         _ = service.Add(2, 3);
         _ = service.Add(4, 5);
-        service.CascadingCompute.InvalidateAdd((a, b) => a == 2 && b == 3);
+        service.InvalidateAdd((a, b) => a == 2 && b == 3);
         _ = service.Add(2, 3);
         _ = service.Add(4, 5);
 
@@ -101,7 +101,7 @@ public sealed partial class GeneratedCascadingComputeTests
 
         // Act
         var first = outer.AddTwice(1, 2);
-        inner.CascadingCompute.InvalidateAdd(1, 2);
+        inner.InvalidateAdd(1, 2);
         var second = outer.AddTwice(1, 2);
 
         // Assert
@@ -122,6 +122,15 @@ public sealed partial class GeneratedCascadingComputeTests
             _calls.Add((a, b));
             return a + b;
         }
+
+        public void InvalidateAdd(int a, int b)
+            => Invalidation.InvalidateAdd(a, b);
+
+        public void InvalidateAdd(Func<int, int, bool> predicate)
+            => Invalidation.InvalidateAdd(predicate);
+
+        public void InvalidateAdd()
+            => Invalidation.InvalidateAdd();
     }
 
     public sealed partial class OuterService

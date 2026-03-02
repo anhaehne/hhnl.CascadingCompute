@@ -49,7 +49,7 @@ public sealed partial class GeneratedCascadingComputeGenericTests
 
         // Act
         var first = service.CascadingCompute.Echo(2);
-        service.CascadingCompute.InvalidateEcho<int>(2);
+        service.InvalidateEcho<int>(2);
         var second = service.CascadingCompute.Echo(2);
 
         // Assert
@@ -71,7 +71,7 @@ public sealed partial class GeneratedCascadingComputeGenericTests
         _ = service.CascadingCompute.Echo(2);
         _ = service.CascadingCompute.Echo(1);
         _ = service.CascadingCompute.Echo(2);
-        service.CascadingCompute.InvalidateEcho<int>(value => value == 1);
+        service.InvalidateEcho<int>(value => value == 1);
         _ = service.CascadingCompute.Echo(1);
         _ = service.CascadingCompute.Echo(2);
 
@@ -106,7 +106,7 @@ public sealed partial class GeneratedCascadingComputeGenericTests
 
         // Act
         var first = service.CascadingCompute.Pair<int, string>(2, "x");
-        service.CascadingCompute.InvalidatePair<int, string>(2, "x");
+        service.InvalidatePair<int, string>(2, "x");
         var second = service.CascadingCompute.Pair<int, string>(2, "x");
 
         // Assert
@@ -197,6 +197,15 @@ public sealed partial class GeneratedCascadingComputeGenericTests
             _pairCalls.Add((typeof(TLeft), typeof(TRight), left, right));
             return (left, right);
         }
+
+        public void InvalidateEcho<T>(T value)
+            => Invalidation.InvalidateEcho<T>(value);
+
+        public void InvalidateEcho<T>(Func<T, bool> predicate)
+            => Invalidation.InvalidateEcho<T>(predicate);
+
+        public void InvalidatePair<TLeft, TRight>(TLeft left, TRight right)
+            => Invalidation.InvalidatePair<TLeft, TRight>(left, right);
     }
 
     public sealed partial class TypedGenericService<T>
@@ -213,7 +222,7 @@ public sealed partial class GeneratedCascadingComputeGenericTests
         }
 
         public void InvalidateIdentity(T value)
-            => CascadingCompute.InvalidateIdentity(value);
+            => Invalidation.InvalidateIdentity(value);
     }
 
     public sealed partial class GenericContextAwareService(MutableGenericCacheContextProvider<string> contextProvider)

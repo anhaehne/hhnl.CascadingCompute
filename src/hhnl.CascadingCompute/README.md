@@ -7,11 +7,12 @@
 When a method is marked with `[CascadingCompute]`, source generators create:
 
 - a `CascadingCompute` wrapper property
+- a private `Invalidation` property of type `CascadingCompute.Invalidation`
 - cached method calls
-- `Invalidate<MethodName>(...)` methods
-- `Invalidate<MethodName>(Func<..., bool> predicate)` methods
-- `InvalidateAll<MethodName>()` methods
-- `InvalidateAll()`
+- `Invalidate<MethodName>(...)` methods on `Invalidation`
+- `Invalidate<MethodName>(Func<..., bool> predicate)` methods on `Invalidation`
+- `Invalidate<MethodName>()` methods on `Invalidation` (generated only when `Invalidate<MethodName>(...)` has parameters)
+- `InvalidateAll()` on `Invalidation`
 
 The library also supports cascading invalidation through `ValueCache` dependencies.
 
@@ -46,13 +47,13 @@ public sealed partial class WeatherService
     public void SetForecast(int cityId, int value)
     {
         _cityForecasts[cityId] = value;
-        CascadingCompute.InvalidateGetForecast(cityId);
+        Invalidation.InvalidateGetForecast(cityId);
     }
 
     public void SetBaseOffset(int offset)
     {
         _baseOffset = offset;
-        CascadingCompute.InvalidateAll();
+        Invalidation.InvalidateAll();
     }
 }
 ```
@@ -70,20 +71,15 @@ var b = service.GetForecast(10); // cached (25)
 service.SetForecast(10, 30); // updates value + invalidates cache entry
 var c = service.GetForecast(10); // recomputes (35)
 
-service.CascadingCompute.InvalidateGetForecast(cityId => cityId > 100); // invalidates matching entries by predicate
-
-service.CascadingCompute.InvalidateAllGetForecast(); // invalidates all GetForecast cache entries
-
 service.SetBaseOffset(2); // changes shared input + invalidates all cache entries
 var d = service.GetForecast(10); // recomputes (32)
-
-service.CascadingCompute.InvalidateAll();
 ```
 
 Predicate invalidation allows selective clearing for one method:
 
 ```csharp
-service.CascadingCompute.InvalidateGetForecast(cityId => cityId is 10 or 20);
+// inside WeatherService
+Invalidation.InvalidateGetForecast(cityId => cityId is 10 or 20);
 ```
 
 ### Parameter requirements and behavior
@@ -119,7 +115,7 @@ public sealed partial class ExchangeRateService : IExchangeRateService
     }
 
     public void InvalidateGetRate(string fromCurrency, string toCurrency)
-        => CascadingCompute.InvalidateGetRate(fromCurrency, toCurrency);
+        => Invalidation.InvalidateGetRate(fromCurrency, toCurrency);
 }
 ```
 
@@ -142,6 +138,9 @@ public sealed partial class PriceService
 {
     [CascadingCompute]
     public decimal GetPrice(int productId) => productId * 1.5m;
+
+    public void InvalidateGetPrice(int productId)
+        => Invalidation.InvalidateGetPrice(productId);
 }
 
 public sealed partial class BasketService
@@ -167,7 +166,7 @@ var first = basketService.GetBasketTotal(42, 2);   // computes
 var second = basketService.GetBasketTotal(42, 2);  // cached
 
 // Invalidate inner cache entry
-priceService.CascadingCompute.InvalidateGetPrice(42);
+priceService.InvalidateGetPrice(42);
 
 // Dependent outer cache entries are invalidated automatically
 var third = basketService.GetBasketTotal(42, 2);   // recomputes
@@ -219,7 +218,7 @@ public sealed partial class UserService
     public int GetUser(int id, string traceId) => id;
 
     // Generated invalidate method only needs `id`
-    // service.CascadingCompute.InvalidateGetUser(id);
+    // Invalidation.InvalidateGetUser(id);
 }
 ```
 
@@ -242,7 +241,7 @@ public sealed partial class ReportService
 }
 
 // `CancellationToken` is ignored in cache key/invalidate signature:
-// service.CascadingCompute.InvalidateBuild(id);
+// Invalidation.InvalidateBuild(id);
 ```
 
 You can also ignore by type:
@@ -301,7 +300,8 @@ When using predicate invalidation with cache context providers, generated predic
 
 ```csharp
 // signature example: InvalidateGetDisplayName(Func<int, string, bool> predicate)
-service.CascadingCompute.InvalidateGetDisplayName((userId, contextUser) => userId == 5 && contextUser == "alice");
+// inside ProfileService
+Invalidation.InvalidateGetDisplayName((userId, contextUser) => userId == 5 && contextUser == "alice");
 ```
 
 ## Auto invalidation
@@ -358,3 +358,4 @@ Notes:
   - non-`void`
   - non-`ref`/`out` parameter methods
 - containing class/interface must be `partial`
+

@@ -109,7 +109,7 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
         _ = service.GetValue(10);
         tenantContextProvider.Context = "tenant-b";
         _ = service.GetValue(10);
-        service.CascadingCompute.InvalidateGetValue((value, tenantContext, userContext) => value == 10 && tenantContext == "tenant-a" && userContext == 7);
+        service.InvalidateGetValue((value, tenantContext, userContext) => value == 10 && tenantContext == "tenant-a" && userContext == 7);
         tenantContextProvider.Context = "tenant-a";
         _ = service.GetValue(10);
         tenantContextProvider.Context = "tenant-b";
@@ -141,6 +141,9 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
             _calls.Add(value);
             return value;
         }
+
+        public void InvalidateGetValue(Func<int, string, int, bool> predicate)
+            => Invalidation.InvalidateGetValue(predicate);
     }
 
     public sealed partial class PrimaryConstructorFieldContextAwareService(MutableCacheContextProvider<string> tenantContextProvider)

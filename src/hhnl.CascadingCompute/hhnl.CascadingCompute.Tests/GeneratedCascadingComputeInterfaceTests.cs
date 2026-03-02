@@ -51,7 +51,7 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         _ = service.Add(2, 3);
         _ = service.Add(4, 5);
         _ = service.Add(2, 3);
-        service.InvalidateAllAdd();
+        service.InvalidateAdd();
         _ = service.Add(2, 3);
         _ = service.Add(4, 5);
 
@@ -141,7 +141,7 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
 
         // Act
         var first = generic.CascadingCompute.Echo(2);
-        generic.CascadingCompute.InvalidateEcho<int>(2);
+        generic.InvalidateEcho<int>(2);
         var second = generic.CascadingCompute.Echo(2);
 
         // Assert
@@ -179,7 +179,7 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
 
         // Act
         var first = generic.CascadingCompute.Pair<int, string>(4, "x");
-        generic.CascadingCompute.InvalidatePair<int, string>(4, "x");
+        generic.InvalidatePair<int, string>(4, "x");
         var second = generic.CascadingCompute.Pair<int, string>(4, "x");
 
         // Assert
@@ -202,7 +202,7 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
 
         void InvalidateAdd(Func<int, int, bool> predicate);
 
-        void InvalidateAllAdd();
+        void InvalidateAdd();
     }
 
     public sealed partial class InterfaceInner : IInterfaceInner
@@ -218,13 +218,13 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         }
 
         public void InvalidateAdd(int a, int b)
-            => CascadingCompute.InvalidateAdd(a, b);
+            => Invalidation.InvalidateAdd(a, b);
 
         public void InvalidateAdd(Func<int, int, bool> predicate)
-            => CascadingCompute.InvalidateAdd(predicate);
+            => Invalidation.InvalidateAdd(predicate);
 
-        public void InvalidateAllAdd()
-            => CascadingCompute.InvalidateAllAdd();
+        public void InvalidateAdd()
+            => Invalidation.InvalidateAdd();
     }
 
     public sealed partial class InterfaceOuter
@@ -284,10 +284,10 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         }
 
         public void InvalidateEcho<T>(T value)
-            => CascadingCompute.InvalidateEcho<T>(value);
+            => Invalidation.InvalidateEcho<T>(value);
 
         public void InvalidatePair<TLeft, TRight>(TLeft left, TRight right)
-            => CascadingCompute.InvalidatePair<TLeft, TRight>(left, right);
+            => Invalidation.InvalidatePair<TLeft, TRight>(left, right);
     }
 
 }

@@ -29,7 +29,7 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
 
         // Act
         var first = await service.AddAsync(2, 3);
-        service.CascadingCompute.InvalidateAddAsync(2, 3);
+        service.InvalidateAddAsync(2, 3);
         var second = await service.AddAsync(2, 3);
 
         // Assert
@@ -64,7 +64,7 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
 
         // Act
         var first = await outer.AddTwiceAsync(1, 2);
-        inner.CascadingCompute.InvalidateAddAsync(1, 2);
+        inner.InvalidateAddAsync(1, 2);
         var second = await outer.AddTwiceAsync(1, 2);
 
         // Assert
@@ -104,6 +104,9 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
             await Task.Yield();
             return a + b;
         }
+
+        public void InvalidateAddAsync(int a, int b)
+            => Invalidation.InvalidateAddAsync(a, b);
     }
 
     public sealed partial class AsyncOuterService

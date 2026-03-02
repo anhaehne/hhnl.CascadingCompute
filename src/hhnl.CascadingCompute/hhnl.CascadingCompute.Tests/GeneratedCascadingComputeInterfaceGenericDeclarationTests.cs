@@ -60,6 +60,6 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         }
 
         public void InvalidateEcho(T value)
-            => CascadingCompute.InvalidateEcho(value);
+            => Invalidation.InvalidateEcho(value);
     }
 }

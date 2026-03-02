@@ -48,5 +48,5 @@ public partial class ServiceInner : IServiceInner
     }
 
     public void InvalidateAdd(int a, int b)
-        => CascadingCompute.InvalidateAdd(a, b);
+        => Invalidation.InvalidateAdd(a, b);
 }

@@ -34,7 +34,7 @@ public sealed partial class GeneratedCascadingComputeInterceptorIgnoredParameter
         // Act
         _ = service.Get(5, cts1.Token);
         _ = service.Get(5, cts2.Token);
-        service.CascadingCompute.InvalidateGet(5);
+        service.InvalidateGet(5);
         _ = service.Get(5, cts2.Token);
 
         // Assert
@@ -53,6 +53,9 @@ public sealed partial class GeneratedCascadingComputeInterceptorIgnoredParameter
             _calls.Add((value, cancellationToken));
             return value;
         }
+
+        public void InvalidateGet(int value)
+            => Invalidation.InvalidateGet(value);
     }
 
     public partial interface IInterfaceCancellationTokenService
@@ -76,6 +79,6 @@ public sealed partial class GeneratedCascadingComputeInterceptorIgnoredParameter
         }
 
         public void InvalidateGet(int value)
-            => CascadingCompute.InvalidateGet(value);
+            => Invalidation.InvalidateGet(value);
     }
 }
