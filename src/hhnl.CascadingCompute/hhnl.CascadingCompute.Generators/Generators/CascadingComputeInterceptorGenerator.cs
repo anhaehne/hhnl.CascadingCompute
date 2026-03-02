@@ -98,6 +98,9 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
 
             var receiverType = methodSymbol.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var returnType = methodSymbol.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var cascadingComputeAccessor = methodSymbol.ContainingType.TypeKind == TypeKind.Class
+                ? $"(({receiverType}.CascadingComputeWrapper)__instance.CascadingCompute)"
+                : "__instance.CascadingCompute";
             var methodName = methodDefinition.Name;
             var methodTypeParameters = GetInterceptorTypeParameters(methodSymbol);
             var methodConstraints = GetInterceptorTypeConstraints(methodSymbol);
@@ -128,7 +131,9 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
                 sb.AppendLine(constraint);
             }
             sb.AppendLine("        {");
-            sb.Append("            return __instance.CascadingCompute.");
+            sb.Append("            return ");
+            sb.Append(cascadingComputeAccessor);
+            sb.Append('.');
             sb.Append(methodName);
             sb.Append(methodTypeArguments);
             sb.Append('(');

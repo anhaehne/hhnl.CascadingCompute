@@ -96,6 +96,24 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     }
 
     [TestMethod]
+    public void Cascading_compute_should_allow_interface_and_implementation_cascading_methods_to_be_called()
+    {
+        // Arrange
+        var service = new InterfaceAndImplementationService();
+        IInterfaceAndImplementationService viaInterface = service;
+
+        // Act
+        var interfaceResult = viaInterface.GetFromInterface(10);
+        var implementationResult = service.GetFromImplementation(20);
+
+        // Assert
+        Assert.AreEqual(10, interfaceResult);
+        Assert.AreEqual(20, implementationResult);
+        Assert.AreEqual(1, service.InterfaceCallCount);
+        Assert.AreEqual(1, service.ImplementationCallCount);
+    }
+
+    [TestMethod]
     public void Cascading_compute_should_cache_generic_interface_call_result()
     {
         // Arrange
@@ -266,6 +284,31 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
 
         public void InvalidatePair<TLeft, TRight>(TLeft left, TRight right)
             => Invalidation.InvalidatePair<TLeft, TRight>(left, right);
+    }
+
+    public partial interface IInterfaceAndImplementationService
+    {
+        [CascadingCompute]
+        int GetFromInterface(int value);
+    }
+
+    public sealed partial class InterfaceAndImplementationService : IInterfaceAndImplementationService
+    {
+        public int InterfaceCallCount { get; private set; }
+        public int ImplementationCallCount { get; private set; }
+
+        public int GetFromInterface(int value)
+        {
+            InterfaceCallCount++;
+            return value;
+        }
+
+        [CascadingCompute]
+        public int GetFromImplementation(int value)
+        {
+            ImplementationCallCount++;
+            return value;
+        }
     }
 
 }
