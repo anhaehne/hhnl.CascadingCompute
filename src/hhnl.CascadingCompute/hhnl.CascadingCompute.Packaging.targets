@@ -5,7 +5,12 @@
         <PackageOutputPath>$(UserProfile)\.nuget\feed</PackageOutputPath>
         <BuildRevision>$([System.DateTime]::UtcNow.ToString('MMddHHmm'))</BuildRevision>
         <PackageVersion>$(VersionPrefix).$(BuildRevision)</PackageVersion>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
+
+    <ItemGroup Condition="'$(IsPackable)' == 'true' and Exists('$(MSBuildProjectDirectory)\..\README.md')">
+        <None Include="$(MSBuildProjectDirectory)\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
+    </ItemGroup>
 
     <Target Name="CleanupOldLocalFeedPackages" AfterTargets="Build" Condition="'$(IsPackable)' == 'true' and '$(GeneratePackageOnBuild)' == 'true' and Exists('$(PackageOutputPath)')">
         <ItemGroup>

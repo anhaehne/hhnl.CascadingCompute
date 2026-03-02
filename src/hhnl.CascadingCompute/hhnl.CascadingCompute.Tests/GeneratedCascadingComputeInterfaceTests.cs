@@ -96,6 +96,23 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     }
 
     [TestMethod]
+    public void Cascading_compute_should_cache_nullable_reference_interface_call_result()
+    {
+        // Arrange
+        var service = new NullableInterfaceService();
+        INullableInterfaceService viaInterface = service;
+
+        // Act
+        var first = viaInterface.Echo(null);
+        var second = viaInterface.Echo(null);
+
+        // Assert
+        Assert.IsNull(first);
+        Assert.IsNull(second);
+        CollectionAssert.AreEqual(new string?[] { null }, service.Calls.ToArray());
+    }
+
+    [TestMethod]
     public void Cascading_compute_should_allow_interface_and_implementation_cascading_methods_to_be_called()
     {
         // Arrange
@@ -292,6 +309,12 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         int GetFromInterface(int value);
     }
 
+    public partial interface INullableInterfaceService
+    {
+        [CascadingCompute]
+        string? Echo(string? value);
+    }
+
     public sealed partial class InterfaceAndImplementationService : IInterfaceAndImplementationService
     {
         public int InterfaceCallCount { get; private set; }
@@ -307,6 +330,19 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         public int GetFromImplementation(int value)
         {
             ImplementationCallCount++;
+            return value;
+        }
+    }
+
+    public sealed partial class NullableInterfaceService : INullableInterfaceService
+    {
+        private readonly List<string?> _calls = [];
+
+        public IReadOnlyList<string?> Calls => _calls;
+
+        public string? Echo(string? value)
+        {
+            _calls.Add(value);
             return value;
         }
     }

@@ -24,6 +24,25 @@ public sealed partial class GeneratedCascadingComputeGenericTests
     }
 
     [TestMethod]
+    public void Cascading_compute_should_recompute_nullable_generic_call_after_cache_invalidation()
+    {
+        // Arrange
+        var service = new GenericService();
+
+        // Act
+        var first = service.CascadingCompute.Echo<string?>(null);
+        service.InvalidateEcho<string?>(value: (string?)null);
+        var second = service.CascadingCompute.Echo<string?>(null);
+
+        // Assert
+        Assert.IsNull(first);
+        Assert.IsNull(second);
+        CollectionAssert.AreEqual(
+            new[] { (typeof(string), (object?)null), (typeof(string), (object?)null) },
+            service.Calls.ToArray());
+    }
+
+    [TestMethod]
     public void Cascading_compute_should_cache_nullable_generic_call_result()
     {
         // Arrange

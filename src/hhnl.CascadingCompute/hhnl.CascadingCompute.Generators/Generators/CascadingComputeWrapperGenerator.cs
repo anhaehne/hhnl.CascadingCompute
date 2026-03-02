@@ -17,6 +17,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     private const string CacheContextProviderInterfaceName = "ICacheContextProvider";
     private const string IgnoreParameterAttributeMetadataName = "hhnl.CascadingCompute.Attributes.CascadingComputeIgnoreParameterAttribute";
     private const string IgnoreAttributeMetadataName = "hhnl.CascadingCompute.Attributes.CascadingComputeIgnoreAttribute";
+    private static readonly SymbolDisplayFormat NullableFullyQualifiedFormat =
+        SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
+            SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
     private static readonly DiagnosticDescriptor ClassMustBePartial = new(
         "CCG001",
@@ -384,7 +387,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(innerIndent);
             sb.Append(methodAccessibility);
             sb.Append(' ');
-            sb.Append(method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+            sb.Append(method.ReturnType.ToDisplayString(NullableFullyQualifiedFormat));
             sb.Append(' ');
             sb.Append(method.Name);
             sb.Append(methodTypeParameters);
@@ -404,7 +407,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             if (method.IsGenericMethod)
             {
                 sb.Append('(');
-                sb.Append(method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                sb.Append(method.ReturnType.ToDisplayString(NullableFullyQualifiedFormat));
                 sb.Append(')');
             }
             sb.Append(fieldName);
@@ -584,7 +587,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             return "global::System.Func<bool>";
 
         var typeArguments = includedParameters
-            .Select(parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+            .Select(parameter => parameter.Type.ToDisplayString(NullableFullyQualifiedFormat))
             .Concat(contextElements.Select(contextElement => contextElement.TypeName))
             .Concat(["bool"]);
 
@@ -618,9 +621,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
     private static string GetPredicateInvocationArgument(IMethodSymbol method, IParameterSymbol parameter, bool usesTuple)
     {
-        var parameterType = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var parameterType = parameter.Type.ToDisplayString(NullableFullyQualifiedFormat);
         var expression = usesTuple ? $"p.{EscapeIdentifier(parameter.Name)}" : "p";
-        if (method.IsGenericMethod || ContainsTypeParameter(parameter.Type))
+        if (method.IsGenericMethod || ContainsTypeParameter(parameter.Type) || IsNullableReferenceType(parameter.Type))
             return $"({parameterType}){expression}!";
 
         return expression;
@@ -668,7 +671,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     private static IEnumerable<string> GetCacheKeyExpressionElements(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters)
     {
         foreach (var typeSymbol in GetGenericMethodTypeSymbols(method))
-            yield return $"typeof({typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})";
+            yield return $"typeof({typeSymbol.ToDisplayString(NullableFullyQualifiedFormat)})";
 
         foreach (var parameter in includedParameters)
         {
@@ -690,8 +693,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         foreach (var parameter in includedParameters)
         {
             var typeName = ContainsTypeParameter(parameter.Type)
+                || IsNullableReferenceType(parameter.Type)
                 ? "global::System.Object"
-                : parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                : parameter.Type.ToDisplayString(NullableFullyQualifiedFormat);
             if (includeNames)
                 yield return $"{typeName} {EscapeIdentifier(parameter.Name)}";
             else
@@ -716,9 +720,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             return EscapeIdentifier(parameter.Name);
 
         var expression = usesTuple ? $"p.{EscapeIdentifier(parameter.Name)}" : "p";
-        if (method.IsGenericMethod || ContainsTypeParameter(parameter.Type))
+        if (method.IsGenericMethod || ContainsTypeParameter(parameter.Type) || IsNullableReferenceType(parameter.Type))
         {
-            var parameterType = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var parameterType = parameter.Type.ToDisplayString(NullableFullyQualifiedFormat);
             return $"({parameterType}){expression}!";
         }
 
@@ -738,11 +742,14 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         };
     }
 
+    private static bool IsNullableReferenceType(ITypeSymbol typeSymbol)
+        => !typeSymbol.IsValueType && typeSymbol.NullableAnnotation == NullableAnnotation.Annotated;
+
     private static IEnumerable<ITypeSymbol> GetGenericMethodTypeSymbols(IMethodSymbol method)
         => method.TypeParameters.Length > 0 ? method.TypeParameters : method.TypeArguments;
 
     private static string GetCacheResultType(IMethodSymbol method)
-        => method.IsGenericMethod ? "global::System.Object" : method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        => method.IsGenericMethod ? "global::System.Object" : method.ReturnType.ToDisplayString(NullableFullyQualifiedFormat);
 
     private static bool ContainsTypeParameter(ITypeSymbol typeSymbol)
     {
@@ -772,7 +779,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
                 elements.Add(new CacheContextElement(
                     $"cacheContext{index++}",
                     $"implementation.{EscapeIdentifier(fieldSymbol.Name)}.GetCacheContext()",
-                    fieldContextType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                    fieldContextType.ToDisplayString(NullableFullyQualifiedFormat)));
                 continue;
             }
 
@@ -784,7 +791,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
                 elements.Add(new CacheContextElement(
                     $"cacheContext{index++}",
                     $"implementation.{EscapeIdentifier(propertySymbol.Name)}.GetCacheContext()",
-                    propertyContextType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+                    propertyContextType.ToDisplayString(NullableFullyQualifiedFormat)));
             }
         }
 
@@ -822,7 +829,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
             parameters.Add(new PrimaryConstructorCacheContextParameter(
                 parameter.Name,
-                cacheContextType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                cacheContextType.ToDisplayString(NullableFullyQualifiedFormat),
                 $"__GetPrimaryConstructorCacheContext{index++}"));
         }
 
@@ -1030,7 +1037,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
     private static bool IsIgnoredParameterType(ITypeSymbol typeSymbol)
     {
-        var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
+        var typeName = typeSymbol.ToDisplayString(NullableFullyQualifiedFormat).Replace("global::", string.Empty);
         return _ignoredParameterTypes.Any(ignoredType => string.Equals(ignoredType.FullName, typeName, StringComparison.Ordinal));
     }
 
@@ -1091,7 +1098,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
         var expressionBuilder = new StringBuilder();
         expressionBuilder.Append("new ");
-        expressionBuilder.Append(attributeData.AttributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        expressionBuilder.Append(attributeData.AttributeClass.ToDisplayString(NullableFullyQualifiedFormat));
         expressionBuilder.Append('(');
         expressionBuilder.Append(string.Join(", ", constructorArguments));
         expressionBuilder.Append(')');
@@ -1123,7 +1130,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         return typedConstant.Kind switch
         {
             TypedConstantKind.Primitive => SymbolDisplay.FormatPrimitive(typedConstant.Value, quoteStrings: true, useHexadecimalNumbers: false),
-            TypedConstantKind.Type => $"typeof({((ITypeSymbol)typedConstant.Value!).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})",
+            TypedConstantKind.Type => $"typeof({((ITypeSymbol)typedConstant.Value!).ToDisplayString(NullableFullyQualifiedFormat)})",
             TypedConstantKind.Enum => GetEnumValueExpression(typedConstant),
             TypedConstantKind.Array => GetArrayExpression(typedConstant),
             _ => null
@@ -1141,9 +1148,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             .FirstOrDefault(member => member.HasConstantValue && Equals(member.ConstantValue, enumValue));
 
         if (enumMember is not null)
-            return $"{enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{enumMember.Name}";
+            return $"{enumType.ToDisplayString(NullableFullyQualifiedFormat)}.{enumMember.Name}";
 
-        return $"({enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}){SymbolDisplay.FormatPrimitive(enumValue, quoteStrings: true, useHexadecimalNumbers: false)}";
+        return $"({enumType.ToDisplayString(NullableFullyQualifiedFormat)}){SymbolDisplay.FormatPrimitive(enumValue, quoteStrings: true, useHexadecimalNumbers: false)}";
     }
 
     private static string? GetArrayExpression(TypedConstant typedConstant)
@@ -1163,7 +1170,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             values.Add(valueExpression);
         }
 
-        return $"new {arrayType.ElementType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}[] {{ {string.Join(", ", values)} }}";
+        return $"new {arrayType.ElementType.ToDisplayString(NullableFullyQualifiedFormat)}[] {{ {string.Join(", ", values)} }}";
     }
 
     private static string GetParameterList(IMethodSymbol method)
@@ -1179,7 +1186,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         return string.Join(", ", parameters.Select(parameter =>
         {
             var modifier = parameter.IsParams ? "params " : string.Empty;
-            var typeName = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var typeName = parameter.Type.ToDisplayString(NullableFullyQualifiedFormat);
             var defaultValue = parameter.HasExplicitDefaultValue ? " = " + GetDefaultValueExpression(parameter) : string.Empty;
             return $"{modifier}{typeName} {EscapeIdentifier(parameter.Name)}{defaultValue}";
         }));
@@ -1219,7 +1226,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             if (typeParameter.HasValueTypeConstraint)
                 parts.Add("struct");
 
-            parts.AddRange(typeParameter.ConstraintTypes.Select(constraintType => constraintType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+            parts.AddRange(typeParameter.ConstraintTypes.Select(constraintType => constraintType.ToDisplayString(NullableFullyQualifiedFormat)));
 
             if (typeParameter.HasConstructorConstraint)
                 parts.Add("new()");
@@ -1298,7 +1305,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             if (typeParameter.HasValueTypeConstraint)
                 parts.Add("struct");
 
-            parts.AddRange(typeParameter.ConstraintTypes.Select(constraintType => constraintType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+            parts.AddRange(typeParameter.ConstraintTypes.Select(constraintType => constraintType.ToDisplayString(NullableFullyQualifiedFormat)));
 
             if (typeParameter.HasConstructorConstraint)
                 parts.Add("new()");
@@ -1321,7 +1328,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
     private static string GetHintName(INamedTypeSymbol typeSymbol)
     {
-        var name = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+        var name = typeSymbol.ToDisplayString(NullableFullyQualifiedFormat)
             .Replace("global::", string.Empty)
             .Replace('<', '_')
             .Replace('>', '_')
@@ -1341,7 +1348,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
         if (parameter.ExplicitDefaultValue is null)
             return parameter.Type.IsValueType
-                ? $"default({parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})"
+                ? $"default({parameter.Type.ToDisplayString(NullableFullyQualifiedFormat)})"
                 : "null";
 
         if (parameter.Type.TypeKind == TypeKind.Enum && parameter.Type is INamedTypeSymbol enumType)
@@ -1351,9 +1358,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
                 .FirstOrDefault(member => member.HasConstantValue && Equals(member.ConstantValue, parameter.ExplicitDefaultValue));
 
             if (enumMember is not null)
-                return $"{enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{enumMember.Name}";
+                return $"{enumType.ToDisplayString(NullableFullyQualifiedFormat)}.{enumMember.Name}";
 
-            return $"({enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}){SymbolDisplay.FormatPrimitive(parameter.ExplicitDefaultValue, quoteStrings: true, useHexadecimalNumbers: false)}";
+            return $"({enumType.ToDisplayString(NullableFullyQualifiedFormat)}){SymbolDisplay.FormatPrimitive(parameter.ExplicitDefaultValue, quoteStrings: true, useHexadecimalNumbers: false)}";
         }
 
         return SymbolDisplay.FormatPrimitive(parameter.ExplicitDefaultValue, quoteStrings: true, useHexadecimalNumbers: false)
@@ -1466,7 +1473,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             var methodTypeParameters = GetMethodTypeParameters(method);
             var methodConstraints = GetMethodConstraints(method);
             sb.Append(memberIndent);
-            sb.Append(method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+            sb.Append(method.ReturnType.ToDisplayString(NullableFullyQualifiedFormat));
             sb.Append(' ');
             sb.Append(method.Name);
             sb.Append(methodTypeParameters);
@@ -1505,7 +1512,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
     private static string GetInterfaceHintName(INamedTypeSymbol interfaceSymbol)
     {
-        var name = interfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+        var name = interfaceSymbol.ToDisplayString(NullableFullyQualifiedFormat)
             .Replace("global::", string.Empty)
             .Replace('<', '_')
             .Replace('>', '_')
@@ -1559,7 +1566,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         if (typeSymbol.TypeArguments.Length == 0)
             return string.Empty;
 
-        return $"<{string.Join(", ", typeSymbol.TypeArguments.Select(argument => argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)))}>";
+        return $"<{string.Join(", ", typeSymbol.TypeArguments.Select(argument => argument.ToDisplayString(NullableFullyQualifiedFormat)))}>";
     }
 
     private sealed class NamedTypeSymbolEqualityComparer : IEqualityComparer<INamedTypeSymbol>
@@ -1571,3 +1578,4 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             => SymbolEqualityComparer.Default.GetHashCode(obj);
     }
 }
+

@@ -11,6 +11,9 @@ namespace hhnl.CascadingCompute.Generators.Generators;
 public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
 {
     private const string AttributeMetadataName = "hhnl.CascadingCompute.Shared.Attributes.CascadingComputeAttribute";
+    private static readonly SymbolDisplayFormat NullableFullyQualifiedFormat =
+        SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
+            SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -96,8 +99,8 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
 
             var location = candidate.Location;
 
-            var receiverType = methodSymbol.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var returnType = methodSymbol.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var receiverType = methodSymbol.ContainingType.ToDisplayString(NullableFullyQualifiedFormat);
+            var returnType = methodSymbol.ReturnType.ToDisplayString(NullableFullyQualifiedFormat);
             var cascadingComputeAccessor = methodSymbol.ContainingType.TypeKind == TypeKind.Class
                 ? $"(({receiverType}.CascadingComputeWrapper)__instance.CascadingCompute)"
                 : "__instance.CascadingCompute";
@@ -194,7 +197,7 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
         return string.Join(", ", method.Parameters.Select(parameter =>
         {
             var modifier = parameter.IsParams ? "params " : string.Empty;
-            var typeName = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var typeName = parameter.Type.ToDisplayString(NullableFullyQualifiedFormat);
             var defaultValue = parameter.HasExplicitDefaultValue ? " = " + GetDefaultValueExpression(parameter) : string.Empty;
             return $"{modifier}{typeName} {EscapeIdentifier(parameter.Name)}{defaultValue}";
         }));
@@ -316,7 +319,7 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
 
         if (parameter.ExplicitDefaultValue is null)
             return parameter.Type.IsValueType
-                ? $"default({parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})"
+                ? $"default({parameter.Type.ToDisplayString(NullableFullyQualifiedFormat)})"
                 : "null";
 
         if (parameter.Type.TypeKind == TypeKind.Enum && parameter.Type is INamedTypeSymbol enumType)
@@ -326,9 +329,9 @@ public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator
                 .FirstOrDefault(member => member.HasConstantValue && Equals(member.ConstantValue, parameter.ExplicitDefaultValue));
 
             if (enumMember is not null)
-                return $"{enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{enumMember.Name}";
+                return $"{enumType.ToDisplayString(NullableFullyQualifiedFormat)}.{enumMember.Name}";
 
-            return $"({enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}){SymbolDisplay.FormatPrimitive(parameter.ExplicitDefaultValue, quoteStrings: true, useHexadecimalNumbers: false)}";
+            return $"({enumType.ToDisplayString(NullableFullyQualifiedFormat)}){SymbolDisplay.FormatPrimitive(parameter.ExplicitDefaultValue, quoteStrings: true, useHexadecimalNumbers: false)}";
         }
 
         return SymbolDisplay.FormatPrimitive(parameter.ExplicitDefaultValue, quoteStrings: true, useHexadecimalNumbers: false)

@@ -91,6 +91,22 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
         Assert.AreEqual(default, service.Calls[0].token);
     }
 
+    [TestMethod]
+    public async Task Cascading_compute_should_cache_async_nullable_reference_call_result()
+    {
+        // Arrange
+        var service = new AsyncNullableReferenceService();
+
+        // Act
+        var first = await service.EchoAsync(null);
+        var second = await service.EchoAsync(null);
+
+        // Assert
+        Assert.IsNull(first);
+        Assert.IsNull(second);
+        CollectionAssert.AreEqual(new string?[] { null }, service.Calls.ToArray());
+    }
+
     public sealed partial class AsyncInnerService
     {
         private readonly List<(int a, int b)> _calls = [];
@@ -140,6 +156,21 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
         public async Task<int> GetAsync(int value, CancellationToken cancellationToken = default)
         {
             _calls.Add((value, cancellationToken));
+            await Task.Yield();
+            return value;
+        }
+    }
+
+    public sealed partial class AsyncNullableReferenceService
+    {
+        private readonly List<string?> _calls = [];
+
+        public IReadOnlyList<string?> Calls => _calls;
+
+        [CascadingCompute]
+        public async Task<string?> EchoAsync(string? value)
+        {
+            _calls.Add(value);
             await Task.Yield();
             return value;
         }
