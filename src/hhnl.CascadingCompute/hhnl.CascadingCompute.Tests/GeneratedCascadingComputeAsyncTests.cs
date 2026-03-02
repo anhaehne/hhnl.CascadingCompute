@@ -87,7 +87,7 @@ public sealed partial class GeneratedCascadingComputeAsyncTests
         // Assert
         Assert.AreEqual(5, first);
         Assert.AreEqual(first, second);
-        Assert.AreEqual(1, service.Calls.Count);
+        Assert.HasCount(1, service.Calls);
         Assert.AreEqual(default, service.Calls[0].token);
     }
 

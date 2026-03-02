@@ -18,7 +18,7 @@ public sealed class AutoInvalidateAttribute : CacheEntryLifetimeObserverAttribut
         _dueTime = timeInMilliseconds;
     }
 
-    public AutoInvalidateAttribute(int years, int months, int days, int hours, int minutes, int seconds, int milliseconds)
+    public AutoInvalidateAttribute(int years = 0, int months = 0, int days = 0, int hours = 0, int minutes = 0, int seconds = 0, int milliseconds = 0)
     {
         var timeSpan = new TimeSpan(days + years * 365 + months * 30, hours, minutes, seconds, milliseconds);
         if (timeSpan <= TimeSpan.Zero)

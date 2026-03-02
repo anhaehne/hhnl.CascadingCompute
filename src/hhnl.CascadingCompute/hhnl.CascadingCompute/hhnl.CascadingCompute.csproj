@@ -13,4 +13,5 @@
         <ProjectReference Include="..\hhnl.CascadingCompute.Shared\hhnl.CascadingCompute.Shared.csproj" />
     </ItemGroup>
 
+    <Import Project="..\hhnl.CascadingCompute.Packaging.targets" />
 </Project>

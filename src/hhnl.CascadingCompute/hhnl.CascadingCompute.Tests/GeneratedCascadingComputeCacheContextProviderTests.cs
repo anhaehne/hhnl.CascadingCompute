@@ -145,7 +145,9 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
 
     public sealed partial class PrimaryConstructorFieldContextAwareService(MutableCacheContextProvider<string> tenantContextProvider)
     {
+#pragma warning disable CS9124 // Parameter is captured into the state of the enclosing type and its value is also used to initialize a field, property, or event.
         private readonly MutableCacheContextProvider<string> _tenantContextProvider = tenantContextProvider;
+#pragma warning restore CS9124 // Parameter is captured into the state of the enclosing type and its value is also used to initialize a field, property, or event.
         private readonly List<int> _calls = [];
 
         public IReadOnlyList<int> Calls => _calls;

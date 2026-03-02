@@ -24,6 +24,7 @@
       <None Include="$(OutputPath)$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
       <None Include="$(OutputPath)$(AssemblyName).pdb" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" Condition="Exists('$(OutputPath)$(AssemblyName).pdb')" />
       <None Update="hhnl.CascadingCompute.Generators.targets" Pack="true" PackagePath="buildTransitive" Visible="true" />
+      <None Include="lib\netstandard2.0\_._" Pack="true" PackagePath="lib/netstandard2.0/_._" Visible="false" />
     </ItemGroup>
 
     <ItemGroup>

@@ -218,7 +218,9 @@ public sealed partial class GeneratedCascadingComputeGenericTests
 
     public sealed partial class GenericContextAwareService(MutableGenericCacheContextProvider<string> contextProvider)
     {
+#pragma warning disable CS9124 // Parameter is captured into the state of the enclosing type and its value is also used to initialize a field, property, or event.
         private readonly MutableGenericCacheContextProvider<string> _contextProvider = contextProvider;
+#pragma warning restore CS9124 // Parameter is captured into the state of the enclosing type and its value is also used to initialize a field, property, or event.
         private readonly List<(string context, Type type, object? value)> _calls = [];
 
         public IReadOnlyList<(string context, Type type, object? value)> Calls => _calls;
