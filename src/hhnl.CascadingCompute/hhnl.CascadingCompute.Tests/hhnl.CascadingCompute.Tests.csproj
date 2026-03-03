@@ -15,6 +15,7 @@
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
     <ProjectReference Include="..\hhnl.CascadingCompute.Tests.OtherAssembly\hhnl.CascadingCompute.Tests.OtherAssembly.csproj" />
+    <ProjectReference Include="..\hhnl.CascadingCompute.DependencyInjection\hhnl.CascadingCompute.DependencyInjection.csproj" />
     <ProjectReference Include="..\hhnl.CascadingCompute\hhnl.CascadingCompute.csproj" />
   </ItemGroup>
 

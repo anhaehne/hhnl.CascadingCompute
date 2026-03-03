@@ -215,6 +215,12 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     {
         var methods = new List<InterfacePassthroughMethod>();
         var seenSignatures = new HashSet<string>(StringComparer.Ordinal);
+        var cascadingClassMethodSignatures = new HashSet<string>(
+            classSymbol.GetMembers()
+                .OfType<IMethodSymbol>()
+                .Where(HasCascadingComputeAttribute)
+                .Select(GetMethodSignatureKey),
+            StringComparer.Ordinal);
 
         foreach (var interfaceSymbol in classSymbol.AllInterfaces)
         {
@@ -226,10 +232,15 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
                 if (classSymbol.FindImplementationForInterfaceMember(interfaceMethod) is not IMethodSymbol implementationMethod)
                     continue;
 
-                if (cachedMethods.Contains(implementationMethod))
+                if (cachedMethods.Contains(implementationMethod)
+                    || HasCascadingComputeAttribute(interfaceMethod)
+                    || HasCascadingComputeAttribute(implementationMethod))
                     continue;
 
                 var signature = GetMethodSignatureKey(interfaceMethod);
+                if (cascadingClassMethodSignatures.Contains(signature))
+                    continue;
+
                 if (!seenSignatures.Add(signature))
                     continue;
 
