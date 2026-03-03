@@ -73,13 +73,12 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
     private static void Execute(SourceProductionContext context, ImmutableArray<IMethodSymbol> methods, ImmutableArray<INamedTypeSymbol> classes)
     {
-        if (methods.IsDefaultOrEmpty)
-            return;
-
-        var interfaceMethodsByType = methods
-            .Where(method => method.ContainingType is { TypeKind: TypeKind.Interface })
-            .GroupBy<IMethodSymbol, INamedTypeSymbol>(method => method.ContainingType, NamedTypeSymbolComparer)
-            .ToDictionary(group => group.Key, group => group.ToList(), NamedTypeSymbolComparer);
+        var interfaceMethodsByType = methods.IsDefaultOrEmpty
+            ? new Dictionary<INamedTypeSymbol, List<IMethodSymbol>>(NamedTypeSymbolComparer)
+            : methods
+                .Where(method => method.ContainingType is { TypeKind: TypeKind.Interface })
+                .GroupBy<IMethodSymbol, INamedTypeSymbol>(method => method.ContainingType, NamedTypeSymbolComparer)
+                .ToDictionary(group => group.Key, group => group.ToList(), NamedTypeSymbolComparer);
 
         var validInterfaces = new Dictionary<INamedTypeSymbol, List<IMethodSymbol>>(NamedTypeSymbolComparer);
         foreach (var kvp in interfaceMethodsByType)
@@ -117,10 +116,12 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             }
         }
 
-        var classMethodsByType = methods
-            .Where(method => method.ContainingType is { TypeKind: TypeKind.Class })
-            .GroupBy<IMethodSymbol, INamedTypeSymbol>(method => method.ContainingType, NamedTypeSymbolComparer)
-            .ToDictionary(group => group.Key, group => group.ToList(), NamedTypeSymbolComparer);
+        var classMethodsByType = methods.IsDefaultOrEmpty
+            ? new Dictionary<INamedTypeSymbol, List<IMethodSymbol>>(NamedTypeSymbolComparer)
+            : methods
+                .Where(method => method.ContainingType is { TypeKind: TypeKind.Class })
+                .GroupBy<IMethodSymbol, INamedTypeSymbol>(method => method.ContainingType, NamedTypeSymbolComparer)
+                .ToDictionary(group => group.Key, group => group.ToList(), NamedTypeSymbolComparer);
 
         var distinctClasses = classes.Distinct(NamedTypeSymbolComparer).ToArray();
         foreach (var classSymbol in distinctClasses)
@@ -128,8 +129,26 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             classMethodsByType.TryGetValue(classSymbol, out var classMethods);
             classMethods ??= [];
 
+            var interfaceMethods = new Dictionary<INamedTypeSymbol, List<IMethodSymbol>>(NamedTypeSymbolComparer);
+            foreach (var interfaceSymbol in classSymbol.AllInterfaces)
+            {
+                var interfaceDefinition = (INamedTypeSymbol)interfaceSymbol.OriginalDefinition;
+                if (interfaceMethods.ContainsKey(interfaceDefinition))
+                    continue;
+
+                if (validInterfaces.TryGetValue(interfaceDefinition, out var knownMethods))
+                {
+                    interfaceMethods[interfaceDefinition] = knownMethods;
+                    continue;
+                }
+
+                var discoveredMethods = GetSupportedCascadingInterfaceMethods(interfaceDefinition);
+                if (discoveredMethods.Count > 0)
+                    interfaceMethods[interfaceDefinition] = discoveredMethods;
+            }
+
             var interfaceTypes = classSymbol.AllInterfaces
-                .Where(interfaceSymbol => validInterfaces.ContainsKey((INamedTypeSymbol)interfaceSymbol.OriginalDefinition))
+                .Where(interfaceSymbol => interfaceMethods.ContainsKey((INamedTypeSymbol)interfaceSymbol.OriginalDefinition))
                 .ToArray();
 
             if (classMethods.Count == 0 && interfaceTypes.Length == 0)
@@ -160,7 +179,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             foreach (var interfaceSymbol in interfaceTypes)
             {
                 var interfaceDefinition = (INamedTypeSymbol)interfaceSymbol.OriginalDefinition;
-                foreach (var interfaceMethod in validInterfaces[interfaceDefinition])
+                foreach (var interfaceMethod in interfaceMethods[interfaceDefinition])
                 {
                     var interfaceMember = GetInterfaceMethod(interfaceSymbol, interfaceMethod);
                     if (interfaceMember is not null
@@ -196,6 +215,27 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
         return method.Parameters.All(parameter => parameter.RefKind == RefKind.None);
     }
+
+    private static List<IMethodSymbol> GetSupportedCascadingInterfaceMethods(INamedTypeSymbol interfaceSymbol)
+    {
+        var methods = new List<IMethodSymbol>();
+        foreach (var method in interfaceSymbol.GetMembers().OfType<IMethodSymbol>())
+        {
+            if (!HasCascadingComputeAttribute(method))
+                continue;
+
+            if (IsSupportedMethod(method))
+                methods.Add(method);
+        }
+
+        return methods;
+    }
+
+    private static bool HasCascadingComputeAttribute(IMethodSymbol method)
+        => method.GetAttributes().Any(IsCascadingComputeAttribute);
+
+    private static bool IsCascadingComputeAttribute(AttributeData attributeData)
+        => InheritsFrom(attributeData.AttributeClass, AttributeMetadataName);
 
     private static bool HasWrapper(INamedTypeSymbol typeSymbol)
         => typeSymbol.GetMembers("CascadingComputeWrapper").OfType<INamedTypeSymbol>().Any();
