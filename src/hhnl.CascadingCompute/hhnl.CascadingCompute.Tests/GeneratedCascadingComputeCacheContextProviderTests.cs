@@ -27,6 +27,115 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
     }
 
     [TestMethod]
+    public void Cascading_compute_should_invalidate_entries_matching_cache_context_parameters()
+    {
+        // Arrange
+        var tenantContextProvider = new MutableCacheContextProvider<string>("tenant-a");
+        var userContextProvider = new MutableCacheContextProvider<int>(7);
+        var service = new ContextAwareService(tenantContextProvider, userContextProvider);
+
+        // Act
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-a";
+        _ = service.GetValue(10);
+        service.InvalidateGetValue(10, "tenant-a", 7);
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { 10, 10, 10 }, service.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_invalidate_primary_constructor_cache_context_entries_by_parameters()
+    {
+        // Arrange
+        var tenantContextProvider = new MutableCacheContextProvider<string>("tenant-a");
+        var service = new PrimaryConstructorContextAwareService(tenantContextProvider);
+
+        // Act
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-a";
+        _ = service.GetValue(10);
+        service.Invalidate(10, "tenant-a");
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { 10, 10, 10 }, service.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_invalidate_primary_constructor_cache_context_entries_by_predicate()
+    {
+        // Arrange
+        var tenantContextProvider = new MutableCacheContextProvider<string>("tenant-a");
+        var service = new PrimaryConstructorContextAwareService(tenantContextProvider);
+
+        // Act
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+        service.Invalidate((value, tenant) => value == 10 && tenant == "tenant-a");
+        tenantContextProvider.Context = "tenant-a";
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { 10, 10, 10 }, service.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_invalidate_primary_constructor_constructor_argument_cache_context_entries_by_parameters()
+    {
+        // Arrange
+        var tenantContextProvider = new MutableCacheContextProvider<string>("tenant-a");
+        var service = new PrimaryConstructorConstructorArgumentContextAwareService(tenantContextProvider);
+
+        // Act
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-a";
+        _ = service.GetValue(10);
+        service.Invalidate(10, "tenant-a");
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { 10, 10, 10 }, service.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_invalidate_primary_constructor_constructor_argument_cache_context_entries_by_predicate()
+    {
+        // Arrange
+        var tenantContextProvider = new MutableCacheContextProvider<string>("tenant-a");
+        var service = new PrimaryConstructorConstructorArgumentContextAwareService(tenantContextProvider);
+
+        // Act
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+        service.Invalidate((value, tenant) => value == 10 && tenant == "tenant-a");
+        tenantContextProvider.Context = "tenant-a";
+        _ = service.GetValue(10);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.GetValue(10);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { 10, 10, 10 }, service.Calls.ToArray());
+    }
+
+    [TestMethod]
     public void Cascading_compute_should_include_primary_constructor_cache_context_provider_without_field_or_property()
     {
         // Arrange
@@ -144,6 +253,9 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
 
         public void InvalidateGetValue(Func<int, string, int, bool> predicate)
             => Invalidation.InvalidateGetValue(predicate);
+
+        public void InvalidateGetValue(int value, string tenant, int user)
+            => Invalidation.InvalidateGetValue(value, tenant, user);
     }
 
     public sealed partial class PrimaryConstructorFieldContextAwareService(MutableCacheContextProvider<string> tenantContextProvider)
@@ -161,6 +273,18 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
             _calls.Add(value);
             return value;
         }
+
+        public void Invalidate(int value, string tenant)
+            => Invalidation.InvalidateGetValue(value, tenant);
+
+        public void Invalidate(Func<int, string, bool> predicate)
+            => Invalidation.InvalidateGetValue(predicate);
+
+        public void Invalidate(int value, string tenant)
+            => Invalidation.InvalidateGetValue(value, tenant);
+
+        public void Invalidate(Func<int, string, bool> predicate)
+            => Invalidation.InvalidateGetValue(predicate);
     }
 
     public sealed partial class PrimaryConstructorConstructorArgumentContextAwareService(MutableCacheContextProvider<string> tenantContextProvider)
@@ -176,6 +300,12 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
             _calls.Add(value);
             return value;
         }
+
+        public void Invalidate(int value, string tenant)
+            => Invalidation.InvalidateGetValue(value, tenant);
+
+        public void Invalidate(Func<int, string, bool> predicate)
+            => Invalidation.InvalidateGetValue(predicate);
     }
 
     public sealed class ContextProviderSink(MutableCacheContextProvider<string> provider)
