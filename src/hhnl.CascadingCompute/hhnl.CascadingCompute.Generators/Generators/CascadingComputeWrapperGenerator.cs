@@ -413,21 +413,22 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.AppendLine();
 
             var parameters = GetParameterList(method);
-            var invalidateParameters = GetParameterList(includedParameters);
             var cacheKeyExpression = GetCacheKeyExpression(method, includedParameters).Replace("implementation.", "_implementation.");
-            var invalidationCacheKeyExpression = cacheKeyExpression
-                .Replace("_implementation.", "cascadingCompute._implementation.")
-                .Replace("__nullKey", "CascadingComputeWrapper.__nullKey");
             var invocationArguments = GetInvocationArguments(method, includedParameters);
-            var predicateIncludeContext = interfaceSymbol is null;
-            var predicateDelegateType = GetPredicateDelegateType(method, includedParameters, predicateIncludeContext);
-            var predicateInvocationArguments = GetPredicateInvocationArguments(method, includedParameters, predicateIncludeContext);
+            var includeCacheContextInInvalidation = true;
+            var invalidateParameters = GetInvalidationParameterList(method, includedParameters, includeCacheContextInInvalidation);
+            var invalidationCacheKeyExpression = GetInvalidationCacheKeyExpression(method, includedParameters, includeCacheContextInInvalidation)
+                .Replace("implementation.", "cascadingCompute._implementation.")
+                .Replace("__nullKey", "CascadingComputeWrapper.__nullKey");
+            var predicateDelegateType = GetPredicateDelegateType(method, includedParameters, includeCacheContextInInvalidation);
+            var predicateInvocationArguments = GetPredicateInvocationArguments(method, includedParameters, includeCacheContextInInvalidation);
             var invalidationPredicateInvocationArguments = predicateInvocationArguments.Replace("__nullKey", "CascadingComputeWrapper.__nullKey");
             var useStaticFactory = includedParameters.Count == method.Parameters.Length;
             var methodAccessibility = GetAccessibility(method.DeclaredAccessibility);
             var methodTypeParameters = GetMethodTypeParameters(method);
             var methodConstraints = GetMethodConstraints(method);
             var invocationTypeArguments = GetMethodTypeArguments(method);
+            var invalidationCacheContextElements = includeCacheContextInInvalidation ? GetCacheContextElements(method) : [];
 
             sb.Append(innerIndent);
             sb.Append(methodAccessibility);
@@ -494,6 +495,15 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
                 invalidationMembers.Append(parameter.Name);
                 invalidationMembers.Append("\">Cache key value for ");
                 invalidationMembers.Append(parameter.Name);
+                invalidationMembers.AppendLine(".</param>");
+            }
+            foreach (var cacheContextElement in invalidationCacheContextElements)
+            {
+                invalidationMembers.Append(invalidationInnerIndent);
+                invalidationMembers.Append("/// <param name=\"");
+                invalidationMembers.Append(cacheContextElement.Name);
+                invalidationMembers.Append("\">Cache context value for ");
+                invalidationMembers.Append(cacheContextElement.Name);
                 invalidationMembers.AppendLine(".</param>");
             }
             invalidationMembers.Append(invalidationInnerIndent);
@@ -716,6 +726,50 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         return GetParameterTupleType(namedElements);
     }
 
+    private static string GetInvalidationParameterList(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters, bool includeCacheContext)
+    {
+        var parameters = new List<string>();
+        parameters.AddRange(includedParameters.Select(parameter =>
+        {
+            var modifier = parameter.IsParams ? "params " : string.Empty;
+            return $"{modifier}{parameter.Type.ToDisplayString(NullableFullyQualifiedFormat)} {EscapeIdentifier(parameter.Name)}";
+        }));
+
+        if (includeCacheContext)
+            parameters.AddRange(GetCacheContextElements(method).Select(cacheContextElement => $"{cacheContextElement.TypeName} {cacheContextElement.Name}"));
+
+        return string.Join(", ", parameters);
+    }
+
+    private static string GetInvalidationCacheKeyExpression(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters, bool includeCacheContext)
+    {
+        var elements = new List<string>();
+
+        foreach (var typeSymbol in GetGenericMethodTypeSymbols(method))
+            elements.Add($"typeof({typeSymbol.ToDisplayString(NullableFullyQualifiedFormat)})");
+
+        foreach (var parameter in includedParameters)
+        {
+            if (ContainsTypeParameter(parameter.Type))
+                elements.Add($"((object){EscapeIdentifier(parameter.Name)})!");
+            else if (IsNullableReferenceType(parameter.Type))
+                elements.Add($"((object?){EscapeIdentifier(parameter.Name)}) ?? __nullKey");
+            else
+                elements.Add(EscapeIdentifier(parameter.Name));
+        }
+
+        foreach (var cacheContextElement in GetCacheContextElements(method))
+            elements.Add(includeCacheContext ? cacheContextElement.Name : cacheContextElement.Expression);
+
+        if (elements.Count == 0)
+            return "default";
+
+        if (elements.Count == 1)
+            return elements[0];
+
+        return GetParameterTupleExpression(elements);
+    }
+
     private static IEnumerable<string> GetCacheKeyExpressionElements(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters)
     {
         foreach (var typeSymbol in GetGenericMethodTypeSymbols(method))
@@ -883,6 +937,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             if (!TryGetCacheContextType(parameter.Type, out var cacheContextType))
                 continue;
 
+            if (IsPrimaryConstructorParameterAssignedToCacheContextMember(typeSymbol, parameter))
+                continue;
+
             parameters.Add(new PrimaryConstructorCacheContextParameter(
                 parameter.Name,
                 cacheContextType.ToDisplayString(NullableFullyQualifiedFormat),
@@ -913,6 +970,37 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         }
 
         cacheContextType = null!;
+        return false;
+    }
+
+    private static bool IsPrimaryConstructorParameterAssignedToCacheContextMember(INamedTypeSymbol typeSymbol, IParameterSymbol parameter)
+    {
+        foreach (var field in typeSymbol.GetMembers().OfType<IFieldSymbol>())
+        {
+            if (field.IsStatic || field.IsImplicitlyDeclared || !TryGetCacheContextType(field.Type, out _))
+                continue;
+
+            foreach (var syntaxReference in field.DeclaringSyntaxReferences)
+            {
+                if (syntaxReference.GetSyntax() is VariableDeclaratorSyntax { Initializer.Value: IdentifierNameSyntax identifier }
+                    && string.Equals(identifier.Identifier.ValueText, parameter.Name, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+
+        foreach (var property in typeSymbol.GetMembers().OfType<IPropertySymbol>())
+        {
+            if (property.IsStatic || property.IsImplicitlyDeclared || !TryGetCacheContextType(property.Type, out _))
+                continue;
+
+            foreach (var syntaxReference in property.DeclaringSyntaxReferences)
+            {
+                if (syntaxReference.GetSyntax() is PropertyDeclarationSyntax { Initializer.Value: IdentifierNameSyntax identifier }
+                    && string.Equals(identifier.Identifier.ValueText, parameter.Name, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+
         return false;
     }
 

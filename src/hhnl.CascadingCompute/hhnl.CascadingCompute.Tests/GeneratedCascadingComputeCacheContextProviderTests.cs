@@ -1,5 +1,6 @@
 using hhnl.CascadingCompute.Shared.Attributes;
 using hhnl.CascadingCompute.Shared.Interfaces;
+using hhnl.CascadingCompute.Tests.OtherAssembly.CrossAssembly.Contracts;
 
 namespace hhnl.CascadingCompute.Tests;
 
@@ -24,6 +25,68 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
 
         // Assert
         CollectionAssert.AreEqual(new[] { 10, 10, 10 }, service.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_include_cache_context_provider_values_for_cross_assembly_interface_implementation()
+    {
+        // Arrange
+        var tenantContextProvider = new MutableCacheContextProvider<string>("tenant-a");
+        var userContextProvider = new MutableCacheContextProvider<int>(7);
+        ICrossAssemblyService service = new CrossAssemblyContextAwareService(tenantContextProvider, userContextProvider);
+
+        // Act
+        _ = service.Multiply(2, 3);
+        _ = service.Multiply(2, 3);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.Multiply(2, 3);
+        userContextProvider.Context = 8;
+        _ = service.Multiply(2, 3);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { (2, 3), (2, 3), (2, 3) }, ((CrossAssemblyContextAwareService)service).Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_invalidate_current_cross_assembly_interface_cache_context_entry()
+    {
+        // Arrange
+        var tenantContextProvider = new MutableCacheContextProvider<string>("tenant-a");
+        var userContextProvider = new MutableCacheContextProvider<int>(7);
+        ICrossAssemblyService service = new CrossAssemblyContextAwareService(tenantContextProvider, userContextProvider);
+
+        // Act
+        _ = service.Multiply(3, 4);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.Multiply(3, 4);
+        tenantContextProvider.Context = "tenant-a";
+        service.InvalidateMultiply(3, 4);
+        _ = service.Multiply(3, 4);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.Multiply(3, 4);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { (3, 4), (3, 4), (3, 4) }, ((CrossAssemblyContextAwareService)service).Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_include_primary_constructor_cache_context_for_cross_assembly_interface_implementation()
+    {
+        // Arrange
+        var tenantContextProvider = new MutableCacheContextProvider<string>("tenant-a");
+        var userContextProvider = new MutableCacheContextProvider<int>(7);
+        ICrossAssemblyService service = new PrimaryConstructorCrossAssemblyContextAwareService(tenantContextProvider, userContextProvider);
+
+        // Act
+        _ = service.Multiply(2, 3);
+        _ = service.Multiply(2, 3);
+        tenantContextProvider.Context = "tenant-b";
+        _ = service.Multiply(2, 3);
+        userContextProvider.Context = 8;
+        _ = service.Multiply(2, 3);
+
+        // Assert
+        CollectionAssert.AreEqual(new[] { (2, 3), (2, 3), (2, 3) }, ((PrimaryConstructorCrossAssemblyContextAwareService)service).Calls.ToArray());
     }
 
     [TestMethod]
@@ -258,11 +321,51 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
             => Invalidation.InvalidateGetValue(value, tenant, user);
     }
 
+    public sealed partial class CrossAssemblyContextAwareService : ICrossAssemblyService
+    {
+        private readonly MutableCacheContextProvider<string> _tenantContextProvider;
+
+        public CrossAssemblyContextAwareService(MutableCacheContextProvider<string> tenantContextProvider, MutableCacheContextProvider<int> userContextProvider)
+        {
+            _tenantContextProvider = tenantContextProvider;
+            UserContextProvider = userContextProvider;
+        }
+
+        public MutableCacheContextProvider<int> UserContextProvider { get; }
+
+        private readonly List<(int left, int right)> _calls = [];
+
+        public IReadOnlyList<(int left, int right)> Calls => _calls;
+
+        public int Multiply(int left, int right)
+        {
+            _calls.Add((left, right));
+            return left * right;
+        }
+
+        public void InvalidateMultiply(int left, int right)
+            => Invalidation.InvalidateMultiply(left, right, _tenantContextProvider.GetCacheContext(), UserContextProvider.GetCacheContext());
+    }
+
+    public sealed partial class PrimaryConstructorCrossAssemblyContextAwareService(MutableCacheContextProvider<string> tenantContextProvider, MutableCacheContextProvider<int> userContextProvider) : ICrossAssemblyService
+    {
+        private readonly List<(int left, int right)> _calls = [];
+
+        public IReadOnlyList<(int left, int right)> Calls => _calls;
+
+        public int Multiply(int left, int right)
+        {
+            _calls.Add((left, right));
+            return left * right;
+        }
+
+        public void InvalidateMultiply(int left, int right)
+            => Invalidation.InvalidateMultiply(left, right, tenantContextProvider.GetCacheContext(), userContextProvider.GetCacheContext());
+    }
+
     public sealed partial class PrimaryConstructorFieldContextAwareService(MutableCacheContextProvider<string> tenantContextProvider)
     {
-#pragma warning disable CS9124 // Parameter is captured into the state of the enclosing type and its value is also used to initialize a field, property, or event.
         private readonly MutableCacheContextProvider<string> _tenantContextProvider = tenantContextProvider;
-#pragma warning restore CS9124 // Parameter is captured into the state of the enclosing type and its value is also used to initialize a field, property, or event.
         private readonly List<int> _calls = [];
 
         public IReadOnlyList<int> Calls => _calls;
@@ -273,12 +376,6 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
             _calls.Add(value);
             return value;
         }
-
-        public void Invalidate(int value, string tenant)
-            => Invalidation.InvalidateGetValue(value, tenant);
-
-        public void Invalidate(Func<int, string, bool> predicate)
-            => Invalidation.InvalidateGetValue(predicate);
 
         public void Invalidate(int value, string tenant)
             => Invalidation.InvalidateGetValue(value, tenant);
@@ -333,6 +430,12 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
             _calls.Add(value);
             return value;
         }
+
+        public void Invalidate(int value, string tenant)
+            => Invalidation.InvalidateGetValue(value, tenant);
+
+        public void Invalidate(Func<int, string, bool> predicate)
+            => Invalidation.InvalidateGetValue(predicate);
     }
 
     public partial interface IContextAwareInterface
