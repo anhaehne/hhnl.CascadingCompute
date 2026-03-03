@@ -14,7 +14,7 @@
       <OutputItemType>Analyzer</OutputItemType>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
-    <ProjectReference Include="..\hhnl.CascadingCompute.Shared\hhnl.CascadingCompute.Shared.csproj" />
+    <ProjectReference Include="..\hhnl.CascadingCompute.Tests.OtherAssembly\hhnl.CascadingCompute.Tests.OtherAssembly.csproj" />
     <ProjectReference Include="..\hhnl.CascadingCompute\hhnl.CascadingCompute.csproj" />
   </ItemGroup>
 
