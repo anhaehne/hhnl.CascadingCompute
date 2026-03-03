@@ -188,6 +188,69 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
     }
 
     [TestMethod]
+    public void Cascading_compute_wrapper_should_passthrough_non_cascading_method_for_inherited_interface()
+    {
+        // Arrange
+        var service = new InheritedInterfaceService();
+
+        // Act
+        var firstCached = service.CascadingCompute.Cached(10);
+        var secondCached = service.CascadingCompute.Cached(10);
+        var baseView = (IBasePassthroughInterface)service.CascadingCompute;
+        var firstPassthrough = baseView.NonCached(20);
+        var secondPassthrough = baseView.NonCached(20);
+
+        // Assert
+        Assert.AreEqual(firstCached, secondCached);
+        Assert.AreEqual(20, firstPassthrough);
+        Assert.AreEqual(20, secondPassthrough);
+        Assert.AreEqual(1, service.CachedCallCount);
+        Assert.AreEqual(2, service.NonCachedCallCount);
+    }
+
+    [TestMethod]
+    public void Cascading_compute_wrapper_should_passthrough_non_cascading_method_for_nested_interface()
+    {
+        // Arrange
+        var service = new NestedPassthroughService();
+
+        // Act
+        var firstCached = service.CascadingCompute.Cached(3);
+        var secondCached = service.CascadingCompute.Cached(3);
+        var nestedView = (NestedPassthroughContracts.INestedPassthrough)service.CascadingCompute;
+        var firstPassthrough = nestedView.NonCached(4);
+        var secondPassthrough = nestedView.NonCached(4);
+
+        // Assert
+        Assert.AreEqual(firstCached, secondCached);
+        Assert.AreEqual(4, firstPassthrough);
+        Assert.AreEqual(4, secondPassthrough);
+        Assert.AreEqual(1, service.CachedCallCount);
+        Assert.AreEqual(2, service.NonCachedCallCount);
+    }
+
+    [TestMethod]
+    public void Cascading_compute_wrapper_should_passthrough_non_cascading_method_for_generic_interface()
+    {
+        // Arrange
+        var service = new GenericPassthroughService<int>();
+
+        // Act
+        var firstCached = service.CascadingCompute.Cached(1);
+        var secondCached = service.CascadingCompute.Cached(1);
+        var genericView = (IGenericPassthrough<int>)service.CascadingCompute;
+        var firstPassthrough = genericView.NonCached(2);
+        var secondPassthrough = genericView.NonCached(2);
+
+        // Assert
+        Assert.AreEqual(firstCached, secondCached);
+        Assert.AreEqual(2, firstPassthrough);
+        Assert.AreEqual(2, secondPassthrough);
+        Assert.AreEqual(1, service.CachedCallCount);
+        Assert.AreEqual(2, service.NonCachedCallCount);
+    }
+
+    [TestMethod]
     public void Cascading_compute_should_recompute_generic_interface_call_with_multiple_generic_arguments_after_cache_invalidation()
     {
         // Arrange
@@ -344,6 +407,90 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         public string? Echo(string? value)
         {
             _calls.Add(value);
+            return value;
+        }
+    }
+
+    public partial interface IBasePassthroughInterface
+    {
+        int NonCached(int value);
+    }
+
+    public partial interface IInheritedPassthroughInterface : IBasePassthroughInterface
+    {
+        [CascadingCompute]
+        int Cached(int value);
+    }
+
+    public sealed partial class InheritedInterfaceService : IInheritedPassthroughInterface
+    {
+        public int CachedCallCount { get; private set; }
+        public int NonCachedCallCount { get; private set; }
+
+        public int Cached(int value)
+        {
+            CachedCallCount++;
+            return value;
+        }
+
+        public int NonCached(int value)
+        {
+            NonCachedCallCount++;
+            return value;
+        }
+    }
+
+    public static partial class NestedPassthroughContracts
+    {
+        public partial interface INestedPassthrough
+        {
+            [CascadingCompute]
+            int Cached(int value);
+
+            int NonCached(int value);
+        }
+    }
+
+    public sealed partial class NestedPassthroughService : NestedPassthroughContracts.INestedPassthrough
+    {
+        public int CachedCallCount { get; private set; }
+        public int NonCachedCallCount { get; private set; }
+
+        public int Cached(int value)
+        {
+            CachedCallCount++;
+            return value;
+        }
+
+        public int NonCached(int value)
+        {
+            NonCachedCallCount++;
+            return value;
+        }
+    }
+
+    public partial interface IGenericPassthrough<T>
+    {
+        [CascadingCompute]
+        T Cached(T value);
+
+        T NonCached(T value);
+    }
+
+    public sealed partial class GenericPassthroughService<T> : IGenericPassthrough<T>
+    {
+        public int CachedCallCount { get; private set; }
+        public int NonCachedCallCount { get; private set; }
+
+        public T Cached(T value)
+        {
+            CachedCallCount++;
+            return value;
+        }
+
+        public T NonCached(T value)
+        {
+            NonCachedCallCount++;
             return value;
         }
     }

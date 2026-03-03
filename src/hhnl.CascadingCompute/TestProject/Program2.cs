@@ -35,7 +35,7 @@ public partial interface IServiceInner
     [CascadingCompute]
     int Add(int a, int b);
 
-    void InvalidateAdd(int a, int b);
+    int SomeOtherMethod(int a);
 }
 
 public partial class ServiceInner : IServiceInner
@@ -49,4 +49,9 @@ public partial class ServiceInner : IServiceInner
 
     public void InvalidateAdd(int a, int b)
         => Invalidation.InvalidateAdd(a, b);
+
+    public int SomeOtherMethod(int a)
+    {
+        throw new NotImplementedException();
+    }
 }
