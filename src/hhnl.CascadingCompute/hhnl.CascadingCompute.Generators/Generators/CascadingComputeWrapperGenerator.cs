@@ -17,6 +17,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     private const string CacheContextProviderInterfaceName = "ICacheContextProvider";
     private const string IgnoreParameterAttributeMetadataName = "hhnl.CascadingCompute.Attributes.CascadingComputeIgnoreParameterAttribute";
     private const string IgnoreAttributeMetadataName = "hhnl.CascadingCompute.Attributes.CascadingComputeIgnoreAttribute";
+    private const string EnabledAttributeMetadataName = "hhnl.CascadingCompute.Attributes.CascadingComputeEnabledAttribute";
     private static readonly SymbolDisplayFormat NullableFullyQualifiedFormat =
         SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
             SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
@@ -280,6 +281,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     private static bool HasWrapper(INamedTypeSymbol typeSymbol)
         => typeSymbol.GetMembers("CascadingComputeWrapper").OfType<INamedTypeSymbol>().Any();
 
+    private static bool HasCascadingComputeEnabledAttribute(INamedTypeSymbol typeSymbol)
+        => typeSymbol.GetAttributes().Any(attribute => attribute.AttributeClass?.ToDisplayString() == EnabledAttributeMetadataName);
+
     private static bool HasCascadingComputeProperty(INamedTypeSymbol typeSymbol)
         => typeSymbol.GetMembers("CascadingCompute").OfType<IPropertySymbol>().Any();
 
@@ -328,8 +332,16 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         }
 
         var indent = string.Empty;
+        var hasEnabledAttribute = HasCascadingComputeEnabledAttribute(typeSymbol);
         foreach (var containingType in GetContainingTypes(typeSymbol))
         {
+            if (!hasEnabledAttribute
+                && SymbolEqualityComparer.Default.Equals(containingType, typeSymbol))
+            {
+                sb.Append(indent);
+                sb.AppendLine("[global::hhnl.CascadingCompute.Attributes.CascadingComputeEnabledAttribute]");
+            }
+
             sb.Append(indent);
             sb.Append(GetAccessibility(containingType.DeclaredAccessibility));
             sb.Append(" partial ");
@@ -1725,6 +1737,12 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         }
 
         sb.Append(indent);
+        if (!HasCascadingComputeEnabledAttribute(interfaceSymbol))
+        {
+            sb.Append(indent);
+            sb.AppendLine("[global::hhnl.CascadingCompute.Attributes.CascadingComputeEnabledAttribute]");
+        }
+
         sb.Append(GetAccessibility(interfaceSymbol.DeclaredAccessibility));
         sb.Append(" partial interface ");
         sb.Append(interfaceSymbol.Name);

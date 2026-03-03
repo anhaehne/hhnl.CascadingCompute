@@ -1,4 +1,5 @@
 using hhnl.CascadingCompute.Shared.Attributes;
+using hhnl.CascadingCompute.Attributes;
 
 namespace hhnl.CascadingCompute.Tests;
 
@@ -185,6 +186,13 @@ public sealed partial class GeneratedCascadingComputeInterfaceTests
         CollectionAssert.AreEqual(
             new[] { (typeof(int), typeof(string), (object)3, (object)"value") },
             service.PairCalls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_mark_interfaces_with_cascading_methods_as_enabled()
+    {
+        Assert.IsTrue(typeof(IInterfaceInner).IsDefined(typeof(CascadingComputeEnabledAttribute), inherit: false));
+        Assert.IsTrue(typeof(IInterfaceGenericService).IsDefined(typeof(CascadingComputeEnabledAttribute), inherit: false));
     }
 
     [TestMethod]

@@ -1,4 +1,5 @@
 ﻿using hhnl.CascadingCompute.Shared.Attributes;
+using hhnl.CascadingCompute.Attributes;
 
 namespace hhnl.CascadingCompute.Tests;
 
@@ -90,6 +91,13 @@ public sealed partial class GeneratedCascadingComputeTests
         Assert.AreEqual(first, second);
         CollectionAssert.AreEqual(new[] { (1, 2), (1, 2) }, outer.Calls.ToArray());
         CollectionAssert.AreEqual(new[] { (1, 2), (3, 2), (1, 2) }, inner.Calls.ToArray());
+    }
+
+    [TestMethod]
+    public void Cascading_compute_should_mark_classes_with_cascading_methods_as_enabled()
+    {
+        Assert.IsTrue(typeof(InnerService).IsDefined(typeof(CascadingComputeEnabledAttribute), inherit: false));
+        Assert.IsTrue(typeof(OuterService).IsDefined(typeof(CascadingComputeEnabledAttribute), inherit: false));
     }
 
     public sealed partial class InnerService
