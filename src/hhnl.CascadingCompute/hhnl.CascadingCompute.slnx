@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="../../README.md" />
+  </Folder>
   <Folder Name="/Tests/">
     <Project Path="hhnl.CascadingCompute.Tests.OtherAssembly/hhnl.CascadingCompute.Tests.OtherAssembly.csproj" Id="43359e8c-46d5-4597-ba54-6f3d43001c5f" />
     <Project Path="hhnl.CascadingCompute.Tests/hhnl.CascadingCompute.Tests.csproj" Id="10033222-3b0d-4dfb-90d6-c924b07ed096" />

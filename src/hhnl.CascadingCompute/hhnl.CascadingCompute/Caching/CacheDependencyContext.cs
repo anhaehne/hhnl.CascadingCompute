@@ -2,5 +2,7 @@
 
 public static class CacheDependencyContext
 {
-    public static AsyncLocal<IDependentCacheEntry?> Current = new();
+    public static AsyncLocal<IDependentCacheEntry?> CurrentEntry = new();
+
+    public static AsyncLocal<IReadOnlyCollection<(string Key, object Value)>?> CurrentTaints = new();
 }

@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis.Text;
 using System.Collections.Immutable;
 using System.Text;
 
-namespace hhnl.CascadingCompute.Generators.Generators;
+namespace hhnl.CascadingCompute.Generators.Interceptors;
 
 [Generator]
 public sealed class CascadingComputeInterceptorGenerator : IIncrementalGenerator

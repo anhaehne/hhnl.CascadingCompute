@@ -303,6 +303,30 @@ When using predicate invalidation with cache context providers, generated predic
 Invalidation.InvalidateGetDisplayName((userId, contextUser) => userId == 5 && contextUser == "alice");
 ```
 
+### Cache context taints
+
+With cache context providers, invalidation stays scoped to the active context (for example tenant/user), even across nested cascading calls.
+
+For you, this means:
+
+- switching context creates independent cache branches automatically,
+- invalidating one context branch does not require passing context values manually,
+- dependent entries are invalidated consistently for the matching context path.
+
+How to use it:
+
+1. Add one or more `ICacheContextProvider<TContext>` fields/properties to your service.
+2. Keep normal method signatures and call generated invalidation with method parameters only.
+3. Use predicate invalidation when you need explicit context filtering.
+
+```csharp
+// key-based invalidation (context is resolved automatically)
+Invalidation.InvalidateGetDisplayName(userId);
+
+// predicate invalidation (context exposed in predicate)
+Invalidation.InvalidateGetDisplayName((id, contextUser) => id == userId && contextUser == "alice");
+```
+
 ## Auto invalidation
 
 Use `[AutoInvalidate(milliseconds)]` on `[CascadingCompute]` methods to expire entries automatically.

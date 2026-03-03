@@ -504,21 +504,24 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
             var parameters = GetParameterList(method);
             var cacheKeyExpression = GetCacheKeyExpression(method, includedParameters).Replace("implementation.", "_implementation.");
+            var taintsExpression = GetCacheContextTaintsExpression(method).Replace("implementation.", "_implementation.");
+            var invalidationTaintsExpression = taintsExpression.Replace("_implementation.", "cascadingCompute._implementation.");
             var invocationArguments = GetInvocationArguments(method, includedParameters);
-            var includeCacheContextInInvalidation = true;
-            var invalidateParameters = GetInvalidationParameterList(method, includedParameters, includeCacheContextInInvalidation);
-            var invalidationCacheKeyExpression = GetInvalidationCacheKeyExpression(method, includedParameters, includeCacheContextInInvalidation)
+            var includeCacheContextInInvalidateByParameters = false;
+            var invalidateParameters = GetInvalidationParameterList(method, includedParameters, includeCacheContextInInvalidateByParameters);
+            var invalidationCacheKeyExpression = GetInvalidationCacheKeyExpression(method, includedParameters, includeCacheContextInInvalidateByParameters)
                 .Replace("implementation.", "cascadingCompute._implementation.")
                 .Replace("__nullKey", "CascadingComputeWrapper.__nullKey");
-            var predicateDelegateType = GetPredicateDelegateType(method, includedParameters, includeCacheContextInInvalidation);
-            var predicateInvocationArguments = GetPredicateInvocationArguments(method, includedParameters, includeCacheContextInInvalidation);
+            var includeCacheContextInInvalidateByPredicate = true;
+            var predicateDelegateType = GetPredicateDelegateType(method, includedParameters, includeCacheContextInInvalidateByPredicate);
+            var predicateInvocationArguments = GetPredicateInvocationArguments(method, includedParameters, includeCacheContextInInvalidateByPredicate);
             var invalidationPredicateInvocationArguments = predicateInvocationArguments.Replace("__nullKey", "CascadingComputeWrapper.__nullKey");
             var useStaticFactory = includedParameters.Count == method.Parameters.Length;
             var methodAccessibility = GetAccessibility(method.DeclaredAccessibility);
             var methodTypeParameters = GetMethodTypeParameters(method);
             var methodConstraints = GetMethodConstraints(method);
             var invocationTypeArguments = GetMethodTypeArguments(method);
-            var invalidationCacheContextElements = includeCacheContextInInvalidation ? GetCacheContextElements(method) : [];
+            var invalidationCacheContextElements = includeCacheContextInInvalidateByParameters ? GetCacheContextElements(method) : [];
 
             sb.Append(innerIndent);
             sb.Append(methodAccessibility);
@@ -562,6 +565,8 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.Append(invocationArguments);
             sb.Append("), ");
             sb.Append(observerFieldName);
+            sb.Append(", ");
+            sb.Append(taintsExpression);
             sb.AppendLine(");");
             sb.Append(innerIndent);
             sb.AppendLine("}");
@@ -617,6 +622,8 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             invalidationMembers.Append(fieldName);
             invalidationMembers.Append(".Invalidate(");
             invalidationMembers.Append(invalidationCacheKeyExpression);
+            invalidationMembers.Append(", ");
+            invalidationMembers.Append(invalidationTaintsExpression);
             invalidationMembers.AppendLine(");");
             invalidationMembers.Append(invalidationInnerIndent);
             invalidationMembers.AppendLine("}");
@@ -848,6 +855,64 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         return GetParameterTupleExpression(elements);
     }
 
+    private static string GetCacheContextTaintsExpression(IMethodSymbol method)
+    {
+        var taints = GetCacheContextTaints(method).ToList();
+        if (taints.Count == 0)
+            return "global::System.Array.Empty<(string Key, object Value)>()";
+
+        var elements = taints.Select(taint =>
+            $"(\"{EscapeStringLiteral(taint.Key)}\", (object){taint.ValueExpression}!)");
+        return $"[{string.Join(", ", elements)}]";
+    }
+
+    private static IEnumerable<CacheContextTaint> GetCacheContextTaints(IMethodSymbol method)
+    {
+        foreach (var member in method.ContainingType.GetMembers())
+        {
+            if (member is IFieldSymbol fieldSymbol
+                && !fieldSymbol.IsStatic
+                && !fieldSymbol.IsImplicitlyDeclared
+                && TryGetCacheContextType(fieldSymbol.Type, out var fieldContextType))
+            {
+                yield return new CacheContextTaint(
+                    GetCacheContextTaintKey(fieldSymbol.Type, fieldContextType),
+                    $"implementation.{EscapeIdentifier(fieldSymbol.Name)}.GetCacheContext()");
+                continue;
+            }
+
+            if (member is IPropertySymbol propertySymbol
+                && !propertySymbol.IsStatic
+                && propertySymbol.GetMethod is not null
+                && TryGetCacheContextType(propertySymbol.Type, out var propertyContextType))
+            {
+                yield return new CacheContextTaint(
+                    GetCacheContextTaintKey(propertySymbol.Type, propertyContextType),
+                    $"implementation.{EscapeIdentifier(propertySymbol.Name)}.GetCacheContext()");
+            }
+        }
+
+        foreach (var primaryConstructorCacheContext in GetPrimaryConstructorCacheContextParameters(method.ContainingType))
+        {
+            yield return new CacheContextTaint(
+                GetCacheContextTaintKey(primaryConstructorCacheContext.ProviderTypeName, primaryConstructorCacheContext.ContextTypeName),
+                $"implementation.{primaryConstructorCacheContext.HelperMethodName}()");
+        }
+    }
+
+    private static string GetCacheContextTaintKey(ITypeSymbol providerType, ITypeSymbol contextType)
+        => GetCacheContextTaintKey(
+            providerType.ToDisplayString(NullableFullyQualifiedFormat),
+            contextType.ToDisplayString(NullableFullyQualifiedFormat));
+
+    private static string GetCacheContextTaintKey(string providerTypeName, string contextTypeName)
+        => providerTypeName + "|" + contextTypeName;
+
+    private static string EscapeStringLiteral(string value)
+        => value
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"");
+
     private static string GetCacheKeyType(IMethodSymbol method, IReadOnlyList<IParameterSymbol> includedParameters)
     {
         var elementTypes = GetCacheKeyTypeElements(method, includedParameters, includeNames: false).ToList();
@@ -1076,6 +1141,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
             parameters.Add(new PrimaryConstructorCacheContextParameter(
                 parameter.Name,
+                parameter.Type.ToDisplayString(NullableFullyQualifiedFormat),
                 cacheContextType.ToDisplayString(NullableFullyQualifiedFormat),
                 $"__GetPrimaryConstructorCacheContext{index++}"));
         }
@@ -1143,7 +1209,8 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             && typeSymbol.ContainingNamespace.ToDisplayString() == CacheContextProviderInterfaceNamespace;
 
     private sealed record CacheContextElement(string Name, string Expression, string TypeName);
-    private sealed record PrimaryConstructorCacheContextParameter(string ParameterName, string ContextTypeName, string HelperMethodName);
+    private sealed record PrimaryConstructorCacheContextParameter(string ParameterName, string ProviderTypeName, string ContextTypeName, string HelperMethodName);
+    private sealed record CacheContextTaint(string Key, string ValueExpression);
     private sealed record InterfacePassthroughMethod(INamedTypeSymbol InterfaceType, IMethodSymbol Method);
 
     private static IReadOnlyList<IParameterSymbol> GetIncludedParameters(IMethodSymbol method)

@@ -48,6 +48,31 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
     }
 
     [TestMethod]
+    public void Cascading_compute_should_add_cache_context_provider_taints_to_cache_entries()
+    {
+        // Arrange
+        CacheContextTaintObserverAttribute.Reset();
+        var tenantContextProvider = new MutableCacheContextProvider<string>("tenant-a");
+        var userContextProvider = new MutableCacheContextProvider<int>(7);
+        var service = new TaintObservedContextAwareService(tenantContextProvider, userContextProvider);
+
+        // Act
+        _ = service.CascadingCompute.GetValue(10);
+
+        // Assert
+        var taints = CacheContextTaintObserverAttribute.LastCreatedTaints;
+        Assert.IsNotNull(taints);
+        Assert.IsGreaterThanOrEqualTo(taints.Count, 2, "Expected at least two taints from cache-context providers.");
+
+        var tenantKey = taints.Keys.FirstOrDefault(key => key.EndsWith("|string", StringComparison.Ordinal));
+        var userKey = taints.Keys.FirstOrDefault(key => key.EndsWith("|int", StringComparison.Ordinal));
+        Assert.IsNotNull(tenantKey, $"Tenant taint key not found. Keys: {string.Join(", ", taints.Keys)}");
+        Assert.IsNotNull(userKey, $"User taint key not found. Keys: {string.Join(", ", taints.Keys)}");
+        Assert.AreEqual("tenant-a", taints[tenantKey!]);
+        Assert.AreEqual(7, taints[userKey!]);
+    }
+
+    [TestMethod]
     public void Cascading_compute_should_invalidate_current_cross_assembly_interface_cache_context_entry()
     {
         // Arrange
@@ -103,7 +128,7 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
         _ = service.GetValue(10);
         tenantContextProvider.Context = "tenant-a";
         _ = service.GetValue(10);
-        service.InvalidateGetValue(10, "tenant-a", 7);
+        service.InvalidateGetValue(10);
         _ = service.GetValue(10);
         tenantContextProvider.Context = "tenant-b";
         _ = service.GetValue(10);
@@ -125,7 +150,7 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
         _ = service.GetValue(10);
         tenantContextProvider.Context = "tenant-a";
         _ = service.GetValue(10);
-        service.Invalidate(10, "tenant-a");
+        service.Invalidate(10);
         _ = service.GetValue(10);
         tenantContextProvider.Context = "tenant-b";
         _ = service.GetValue(10);
@@ -168,7 +193,7 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
         _ = service.GetValue(10);
         tenantContextProvider.Context = "tenant-a";
         _ = service.GetValue(10);
-        service.Invalidate(10, "tenant-a");
+        service.Invalidate(10);
         _ = service.GetValue(10);
         tenantContextProvider.Context = "tenant-b";
         _ = service.GetValue(10);
@@ -317,8 +342,26 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
         public void InvalidateGetValue(Func<int, string, int, bool> predicate)
             => Invalidation.InvalidateGetValue(predicate);
 
-        public void InvalidateGetValue(int value, string tenant, int user)
-            => Invalidation.InvalidateGetValue(value, tenant, user);
+        public void InvalidateGetValue(int value)
+            => Invalidation.InvalidateGetValue(value);
+    }
+
+    public sealed partial class TaintObservedContextAwareService
+    {
+        private readonly MutableCacheContextProvider<string> _tenantContextProvider;
+
+        public TaintObservedContextAwareService(MutableCacheContextProvider<string> tenantContextProvider, MutableCacheContextProvider<int> userContextProvider)
+        {
+            _tenantContextProvider = tenantContextProvider;
+            UserContextProvider = userContextProvider;
+        }
+
+        public MutableCacheContextProvider<int> UserContextProvider { get; }
+
+        [CascadingCompute]
+        [CacheContextTaintObserver]
+        public int GetValue(int value)
+            => value;
     }
 
     public sealed partial class CrossAssemblyContextAwareService : ICrossAssemblyService
@@ -344,7 +387,7 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
         }
 
         public void InvalidateMultiply(int left, int right)
-            => Invalidation.InvalidateMultiply(left, right, _tenantContextProvider.GetCacheContext(), UserContextProvider.GetCacheContext());
+            => Invalidation.InvalidateMultiply(left, right);
     }
 
     public sealed partial class PrimaryConstructorCrossAssemblyContextAwareService(MutableCacheContextProvider<string> tenantContextProvider, MutableCacheContextProvider<int> userContextProvider) : ICrossAssemblyService
@@ -360,7 +403,7 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
         }
 
         public void InvalidateMultiply(int left, int right)
-            => Invalidation.InvalidateMultiply(left, right, tenantContextProvider.GetCacheContext(), userContextProvider.GetCacheContext());
+            => Invalidation.InvalidateMultiply(left, right);
     }
 
     public sealed partial class PrimaryConstructorFieldContextAwareService(MutableCacheContextProvider<string> tenantContextProvider)
@@ -377,8 +420,8 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
             return value;
         }
 
-        public void Invalidate(int value, string tenant)
-            => Invalidation.InvalidateGetValue(value, tenant);
+        public void Invalidate(int value)
+            => Invalidation.InvalidateGetValue(value);
 
         public void Invalidate(Func<int, string, bool> predicate)
             => Invalidation.InvalidateGetValue(predicate);
@@ -398,8 +441,8 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
             return value;
         }
 
-        public void Invalidate(int value, string tenant)
-            => Invalidation.InvalidateGetValue(value, tenant);
+        public void Invalidate(int value)
+            => Invalidation.InvalidateGetValue(value);
 
         public void Invalidate(Func<int, string, bool> predicate)
             => Invalidation.InvalidateGetValue(predicate);
@@ -431,8 +474,8 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
             return value;
         }
 
-        public void Invalidate(int value, string tenant)
-            => Invalidation.InvalidateGetValue(value, tenant);
+        public void Invalidate(int value)
+            => Invalidation.InvalidateGetValue(value);
 
         public void Invalidate(Func<int, string, bool> predicate)
             => Invalidation.InvalidateGetValue(predicate);
@@ -471,5 +514,25 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
 
         public TContext GetCacheContext()
             => Context;
+    }
+
+    [AttributeUsage(AttributeTargets.Method)]
+    public sealed class CacheContextTaintObserverAttribute : CacheEntryLifetimeObserverAttribute
+    {
+        public static IReadOnlyDictionary<string, object>? LastCreatedTaints { get; private set; }
+
+        public static void Reset()
+            => LastCreatedTaints = null;
+
+        public override void OnCacheEntryCreated<TResult>(ICacheEntry<TResult> cacheEntry)
+        {
+            var taintsProperty = cacheEntry.GetType().GetProperty("Taints");
+            if (taintsProperty?.GetValue(cacheEntry) is IReadOnlySet<(string Key, object Value)> taints)
+                LastCreatedTaints = taints.ToDictionary(taint => taint.Key, taint => taint.Value);
+        }
+
+        public override void OnCacheEntryInvalidated<TResult>(ICacheEntry<TResult> cacheEntry)
+        {
+        }
     }
 }

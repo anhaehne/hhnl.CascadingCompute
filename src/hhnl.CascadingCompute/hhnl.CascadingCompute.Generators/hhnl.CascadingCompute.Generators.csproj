@@ -32,10 +32,6 @@
       <None Include="lib\netstandard2.0\_._" Pack="true" PackagePath="lib/netstandard2.0/_._" Visible="false" />
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="Interceptors\" />
-    </ItemGroup>
-
     <Import Project="..\hhnl.CascadingCompute.Packaging.targets" />
 
 </Project>
