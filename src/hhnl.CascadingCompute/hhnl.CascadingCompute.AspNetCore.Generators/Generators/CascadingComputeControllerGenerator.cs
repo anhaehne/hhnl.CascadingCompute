@@ -10,7 +10,11 @@ namespace hhnl.CascadingCompute.AspNetCore.Generators.Generators;
 [Generator]
 public sealed class CascadingComputeControllerGenerator : IIncrementalGenerator
 {
-    private const string ControllerAttributeMetadataName = "hhnl.CascadingCompute.AspNetCore.Shared.Attributes.CascadingComputeControllerAttribute";
+    private const string ControllerAttributeMetadataName = "hhnl.CascadingCompute.AspNetCore.Attributes.CascadingComputeControllerAttribute";
+    private const string ServiceControllerNamespace = "hhnl.CascadingCompute.AspNetCore";
+    private const string ServiceControllerName = "CascadingComputeServiceController";
+    private const string RouteAttributeMetadataName = "hhnl.CascadingCompute.AspNetCore.Shared.Attributes.CascadingComputeRouteAttribute";
+    private const string RouteFromBodyAttributeMetadataName = "hhnl.CascadingCompute.AspNetCore.Shared.Attributes.CascadingComputeRouteFromBodyAttribute";
     private const string ControllerInterfaceMetadataName = "hhnl.CascadingCompute.AspNetCore.Interfaces.ICascadingComputeController";
     private const string TypeFilterAttributeMetadataName = "Microsoft.AspNetCore.Mvc.TypeFilterAttribute";
     private const string CacheContextProviderInterfaceNamespace = "hhnl.CascadingCompute.Shared.Interfaces";
@@ -32,17 +36,34 @@ public sealed class CascadingComputeControllerGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var controllers = context.SyntaxProvider.ForAttributeWithMetadataName(
+        var attributedControllers = context.SyntaxProvider.ForAttributeWithMetadataName(
             ControllerAttributeMetadataName,
             static (node, _) => node is ClassDeclarationSyntax,
             static (ctx, _) => (INamedTypeSymbol)ctx.TargetSymbol);
 
-        context.RegisterSourceOutput(controllers.Collect(), static (spc, classes) => Execute(spc, classes));
+        var serviceControllers = context.SyntaxProvider.CreateSyntaxProvider(
+                static (node, _) => node is ClassDeclarationSyntax,
+                static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol((ClassDeclarationSyntax)ctx.Node) as INamedTypeSymbol)
+            .Where(static symbol => symbol is not null)
+            .Select(static (symbol, _) => symbol!)
+            .Where(static symbol => IsServiceController(symbol));
+
+        context.RegisterSourceOutput(
+            attributedControllers.Collect().Combine(serviceControllers.Collect()),
+            static (spc, data) => Execute(spc, data.Left, data.Right));
     }
 
-    private static void Execute(SourceProductionContext context, ImmutableArray<INamedTypeSymbol> classes)
+    private static void Execute(
+        SourceProductionContext context,
+        ImmutableArray<INamedTypeSymbol> attributedControllers,
+        ImmutableArray<INamedTypeSymbol> serviceControllers)
     {
-        foreach (var classSymbol in classes.Distinct(NamedTypeSymbolComparer))
+        var classes = attributedControllers
+            .AddRange(serviceControllers)
+            .Distinct(NamedTypeSymbolComparer)
+            .ToArray();
+
+        foreach (var classSymbol in classes)
         {
             if (classSymbol is null)
                 continue;
@@ -188,6 +209,10 @@ public sealed class CascadingComputeControllerGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
+        var serviceInterface = GetServiceInterfaceType(controller);
+        if (serviceInterface is not null)
+            AppendGeneratedServiceMethods(sb, indent, controller, serviceInterface);
+
         for (var i = 0; i < GetContainingTypeCount(controller); i++)
         {
             indent = indent.Length >= 4 ? indent.Substring(0, indent.Length - 4) : string.Empty;
@@ -201,8 +226,191 @@ public sealed class CascadingComputeControllerGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
+    private static void AppendGeneratedServiceMethods(StringBuilder sb, string indent, INamedTypeSymbol controller, INamedTypeSymbol serviceInterface)
+    {
+        foreach (var serviceMethod in GetServiceMethods(serviceInterface))
+        {
+            if (HasControllerMethod(controller, serviceMethod))
+                continue;
+
+            sb.Append(indent);
+            sb.Append("[global::Microsoft.AspNetCore.Mvc.");
+            sb.Append(GetHttpMethodAttributeTypeName(serviceMethod));
+            sb.Append("(\"");
+            sb.Append(EscapeStringLiteral(GetRouteTemplate(serviceMethod)));
+            sb.AppendLine("\")]");
+
+            sb.Append(indent);
+            sb.Append("public ");
+            sb.Append(serviceMethod.ReturnType.ToDisplayString(NullableFullyQualifiedFormat));
+            sb.Append(' ');
+            sb.Append(serviceMethod.Name);
+            sb.Append('(');
+            sb.Append(GetControllerMethodParameterList(serviceMethod));
+            sb.AppendLine(")");
+            sb.Append(indent);
+            sb.AppendLine("{");
+            sb.Append(indent);
+            sb.Append("    ");
+            if (!serviceMethod.ReturnsVoid)
+                sb.Append("return ");
+            sb.Append("_service.");
+            sb.Append(serviceMethod.Name);
+            sb.Append('(');
+            sb.Append(GetControllerMethodInvocationArguments(serviceMethod));
+            sb.AppendLine(");");
+            sb.Append(indent);
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
+    }
+
+    private static string GetHttpMethodAttributeTypeName(IMethodSymbol serviceMethod)
+    {
+        var routeAttribute = serviceMethod.GetAttributes().FirstOrDefault(attribute => attribute.AttributeClass?.ToDisplayString() == RouteAttributeMetadataName);
+        if (routeAttribute?.ConstructorArguments is { Length: > 1 }
+            && routeAttribute.ConstructorArguments[1].Kind == TypedConstantKind.Enum
+            && routeAttribute.ConstructorArguments[1].Value is object enumValue)
+        {
+            var method = Convert.ToInt32(enumValue);
+            return method switch
+            {
+                1 => "HttpPostAttribute",
+                2 => "HttpPutAttribute",
+                3 => "HttpDeleteAttribute",
+                _ => "HttpGetAttribute"
+            };
+        }
+
+        return "HttpGetAttribute";
+    }
+
+    private static IEnumerable<IMethodSymbol> GetServiceMethods(INamedTypeSymbol serviceInterface)
+    {
+        var methods = serviceInterface
+            .GetMembers()
+            .OfType<IMethodSymbol>()
+            .Where(static method => method.MethodKind == MethodKind.Ordinary && !method.IsStatic)
+            .ToList();
+
+        foreach (var baseInterface in serviceInterface.AllInterfaces)
+        {
+            methods.AddRange(baseInterface
+                .GetMembers()
+                .OfType<IMethodSymbol>()
+                .Where(static method => method.MethodKind == MethodKind.Ordinary && !method.IsStatic));
+        }
+
+        return methods
+            .GroupBy(GetMethodSignatureKey, StringComparer.Ordinal)
+            .Select(group => group.First());
+    }
+
+    private static string GetMethodSignatureKey(IMethodSymbol method)
+        => $"{method.Name}|{method.Arity}|{method.ReturnType.ToDisplayString(NullableFullyQualifiedFormat)}|{string.Join(",", method.Parameters.Select(parameter => $"{parameter.RefKind}:{parameter.Type.ToDisplayString(NullableFullyQualifiedFormat)}"))}";
+
+    private static bool HasControllerMethod(INamedTypeSymbol controller, IMethodSymbol serviceMethod)
+    {
+        foreach (var candidate in controller.GetMembers(serviceMethod.Name).OfType<IMethodSymbol>())
+        {
+            if (candidate.MethodKind != MethodKind.Ordinary)
+                continue;
+
+            if (!SymbolEqualityComparer.Default.Equals(candidate.ReturnType, serviceMethod.ReturnType))
+                continue;
+
+            if (candidate.Parameters.Length != serviceMethod.Parameters.Length)
+                continue;
+
+            var allParametersMatch = true;
+            for (var index = 0; index < candidate.Parameters.Length; index++)
+            {
+                var left = candidate.Parameters[index];
+                var right = serviceMethod.Parameters[index];
+                if (left.RefKind != right.RefKind || !SymbolEqualityComparer.Default.Equals(left.Type, right.Type))
+                {
+                    allParametersMatch = false;
+                    break;
+                }
+            }
+
+            if (allParametersMatch)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string GetRouteTemplate(IMethodSymbol serviceMethod)
+    {
+        var routeAttribute = serviceMethod.GetAttributes().FirstOrDefault(attribute => attribute.AttributeClass?.ToDisplayString() == RouteAttributeMetadataName);
+        if (routeAttribute?.ConstructorArguments is { Length: > 0 }
+            && routeAttribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Primitive, Value: string template }
+            && !string.IsNullOrWhiteSpace(template))
+            return template;
+
+        return serviceMethod.Name;
+    }
+
+    private static string GetControllerMethodParameterList(IMethodSymbol serviceMethod)
+        => string.Join(", ", serviceMethod.Parameters.Select(parameter =>
+        {
+            var bodyPrefix = HasRouteFromBodyAttribute(parameter) ? "[global::Microsoft.AspNetCore.Mvc.FromBodyAttribute] " : string.Empty;
+            var modifier = parameter.RefKind switch
+            {
+                RefKind.Ref => "ref ",
+                RefKind.Out => "out ",
+                RefKind.In => "in ",
+                _ => string.Empty
+            };
+            var paramsModifier = parameter.IsParams ? "params " : string.Empty;
+            return $"{bodyPrefix}{modifier}{paramsModifier}{parameter.Type.ToDisplayString(NullableFullyQualifiedFormat)} {EscapeIdentifier(parameter.Name)}";
+        }));
+
+    private static string GetControllerMethodInvocationArguments(IMethodSymbol serviceMethod)
+        => string.Join(", ", serviceMethod.Parameters.Select(parameter =>
+        {
+            var modifier = parameter.RefKind switch
+            {
+                RefKind.Ref => "ref ",
+                RefKind.Out => "out ",
+                RefKind.In => "in ",
+                _ => string.Empty
+            };
+
+            return modifier + EscapeIdentifier(parameter.Name);
+        }));
+
+    private static bool HasRouteFromBodyAttribute(IParameterSymbol parameter)
+        => parameter.GetAttributes().Any(attribute => attribute.AttributeClass?.ToDisplayString() == RouteFromBodyAttributeMetadataName);
+
     private static bool ImplementsControllerInterface(INamedTypeSymbol controller)
         => controller.AllInterfaces.Any(i => i.ToDisplayString() == ControllerInterfaceMetadataName);
+
+    private static bool IsServiceController(INamedTypeSymbol typeSymbol)
+        => GetServiceInterfaceType(typeSymbol) is not null;
+
+    private static INamedTypeSymbol? GetServiceInterfaceType(INamedTypeSymbol controller)
+    {
+        var current = controller;
+        while (current is not null)
+        {
+            if (current.BaseType is INamedTypeSymbol baseType
+                && IsServiceControllerBaseType(baseType)
+                && baseType.TypeArguments.Length == 1
+                && baseType.TypeArguments[0] is INamedTypeSymbol serviceType
+                && serviceType.TypeKind == TypeKind.Interface)
+                return serviceType;
+
+            current = current.BaseType;
+        }
+
+        return null;
+    }
+
+    private static bool IsServiceControllerBaseType(INamedTypeSymbol baseType)
+        => baseType.OriginalDefinition is { Name: ServiceControllerName, Arity: 1 }
+            && baseType.OriginalDefinition.ContainingNamespace.ToDisplayString() == ServiceControllerNamespace;
 
     private static bool HasTypeFilterAttribute(INamedTypeSymbol controller)
         => controller.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == TypeFilterAttributeMetadataName);

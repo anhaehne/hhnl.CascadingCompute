@@ -1,5 +1,4 @@
-using hhnl.CascadingCompute.AspNetCore.Interfaces;
-using hhnl.CascadingCompute.AspNetCore.Shared.Attributes;
+using hhnl.CascadingCompute.AspNetCore.Attributes;
 using hhnl.CascadingCompute.Caching;
 using hhnl.CascadingCompute.Shared.Interfaces;
 using Microsoft.AspNetCore.Http;
@@ -43,7 +42,7 @@ public partial class CascadingComputeActionFilterTests
 
         // Assert 1
         Assert.IsNotNull(observedTaints);
-        Assert.AreEqual(1, observedTaints.Count);
+        Assert.HasCount(1, observedTaints);
         StringAssert.EndsWith(observedTaints.First().Key, "TestTenantCacheContextProvider|string");
         Assert.AreEqual("tenant-a", observedTaints.First().Value);
 

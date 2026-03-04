@@ -5,9 +5,9 @@ namespace TestProject.Shared.Services;
 
 public interface IWeatherService
 {
-    [CascadingComputeRoute("forecast/{cityId:int}")]
+    [CascadingComputeRoute("{cityId:int}")]
     int GetForecast(int cityId);
 
-    [CascadingComputeRoute("forecast/{cityId:int}", CascadingComputeHttpMethod.Post)]
+    [CascadingComputeRoute("{cityId:int}", CascadingComputeHttpMethod.Post)]
     Task SetForecastAsync(int cityId, [CascadingComputeRouteFromBody] int value, CancellationToken cancellationToken);
 }
