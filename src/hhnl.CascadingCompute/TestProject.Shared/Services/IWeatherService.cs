@@ -1,13 +1,13 @@
 ﻿using hhnl.CascadingCompute.AspNetCore.Shared.Attributes;
-using hhnl.CascadingCompute.AspNetCore.Shared.Enums;
 
 namespace TestProject.Shared.Services;
 
+[CascadingComputeRoute("/api/weather")]
 public interface IWeatherService
 {
-    [CascadingComputeRoute("{cityId:int}")]
+    [CascadingComputeGet("{cityId:int}")]
     int GetForecast(int cityId);
 
-    [CascadingComputeRoute("{cityId:int}", CascadingComputeHttpMethod.Post)]
+    [CascadingComputePost("{cityId:int}")]
     Task SetForecastAsync(int cityId, [CascadingComputeRouteFromBody] int value, CancellationToken cancellationToken);
 }

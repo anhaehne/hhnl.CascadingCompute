@@ -1,5 +1,4 @@
 using hhnl.CascadingCompute.AspNetCore.Shared.Attributes;
-using hhnl.CascadingCompute.AspNetCore.Shared.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace hhnl.CascadingCompute.AspNetCore.Tests;
@@ -57,6 +56,32 @@ public class CascadingComputeServiceControllerGeneratorTests
     }
 
     [TestMethod]
+    public void Generated_controller_should_use_interface_route_for_controller_route_attribute()
+    {
+        // Arrange
+        var attributes = typeof(GeneratedWeatherController).GetCustomAttributes(inherit: true);
+
+        // Act 1
+        var routeAttribute = attributes.OfType<RouteAttribute>().Single();
+
+        // Assert 1
+        Assert.AreEqual("api/weather", routeAttribute.Template);
+    }
+
+    [TestMethod]
+    public void Generated_controller_should_have_api_controller_attribute()
+    {
+        // Arrange
+        var attributes = typeof(GeneratedWeatherController).GetCustomAttributes(inherit: true);
+
+        // Act 1
+        var apiControllerAttributes = attributes.OfType<ApiControllerAttribute>().ToList();
+
+        // Assert 1
+        Assert.HasCount(1, apiControllerAttributes);
+    }
+
+    [TestMethod]
     public void Generated_controller_method_should_apply_from_body_attribute_for_marked_parameter()
     {
         // Arrange
@@ -86,19 +111,29 @@ public class CascadingComputeServiceControllerGeneratorTests
     }
 }
 
+[CascadingComputeRoute("api/weather")]
 public interface ITestWeatherService
 {
-    [CascadingComputeRoute("forecast/{cityId:int}")]
+    [CascadingComputeGet("forecast/{cityId:int}")]
     int GetForecast(int cityId);
 
-    [CascadingComputeRoute("forecast/{cityId:int}", CascadingComputeHttpMethod.Post)]
+    [CascadingComputePost("forecast/{cityId:int}")]
     Task SetForecastAsync(int cityId, [CascadingComputeRouteFromBody] int value, CancellationToken cancellationToken);
 
-    [CascadingComputeRoute("forecast/{cityId:int}", CascadingComputeHttpMethod.Put)]
+    [CascadingComputePut("forecast/{cityId:int}")]
     Task UpdateForecast(int cityId, [CascadingComputeRouteFromBody] int value, CancellationToken cancellationToken);
 
-    [CascadingComputeRoute("forecast/{cityId:int}", CascadingComputeHttpMethod.Delete)]
+    [CascadingComputeDelete("forecast/{cityId:int}")]
     Task DeleteForecast(int cityId, CancellationToken cancellationToken);
+
+    [CascadingComputeHead("forecast/{cityId:int}")]
+    Task HeadForecast(int cityId, CancellationToken cancellationToken);
+
+    [CascadingComputePatch("forecast/{cityId:int}")]
+    Task PatchForecast(int cityId, [CascadingComputeRouteFromBody] int value, CancellationToken cancellationToken);
+
+    [CascadingComputeOptions("forecast/{cityId:int}")]
+    Task OptionsForecast(int cityId, CancellationToken cancellationToken);
 
     string Ping(string location);
 }
@@ -128,6 +163,15 @@ public sealed class TestWeatherService : ITestWeatherService
         => Task.CompletedTask;
 
     public Task DeleteForecast(int cityId, CancellationToken cancellationToken)
+        => Task.CompletedTask;
+
+    public Task HeadForecast(int cityId, CancellationToken cancellationToken)
+        => Task.CompletedTask;
+
+    public Task PatchForecast(int cityId, int value, CancellationToken cancellationToken)
+        => Task.CompletedTask;
+
+    public Task OptionsForecast(int cityId, CancellationToken cancellationToken)
         => Task.CompletedTask;
 
     public string Ping(string location) => $"pong:{location}";
