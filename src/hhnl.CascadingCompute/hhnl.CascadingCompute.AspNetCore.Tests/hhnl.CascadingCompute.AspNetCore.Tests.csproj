@@ -7,4 +7,16 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\hhnl.CascadingCompute.AspNetCore\hhnl.CascadingCompute.AspNetCore.csproj" />
+    <ProjectReference Include="..\hhnl.CascadingCompute.AspNetCore.Generators\hhnl.CascadingCompute.AspNetCore.Generators.csproj">
+      <OutputItemType>Analyzer</OutputItemType>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
 </Project>

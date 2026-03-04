@@ -1,13 +1,17 @@
 using hhnl.CascadingCompute.Shared.Attributes;
-using TestProject.Server.Caching;
 using TestProject.Server.Context;
 
 namespace TestProject.Server.Services;
 
+public interface IWeatherService
+{
+    int GetForecast(int cityId);
+    Task SetForecastAsync(int cityId, int value, CancellationToken cancellationToken);
+}
+
 public sealed partial class WeatherService(
     WeatherDataStore weatherDataStore,
-    TenantCacheContextProvider tenantCacheContextProvider,
-    IInvalidationPublisher invalidationPublisher)
+    TenantContextAccessor tenantContextAccessor) : IWeatherService
 {
     [CascadingCompute]
     public int GetForecast(int cityId)
@@ -20,12 +24,5 @@ public sealed partial class WeatherService(
     {
         weatherDataStore.SetForecast(cityId, value);
         Invalidation.InvalidateGetForecast(cityId);
-
-        await invalidationPublisher.PublishAsync(
-            WeatherCacheKeyFactory.GetForecast(cityId),
-            cancellationToken);
     }
-
-    public string GetActiveTenantId()
-        => tenantCacheContextProvider.GetCacheContext();
 }

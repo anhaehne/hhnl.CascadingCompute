@@ -8,7 +8,7 @@ namespace TestProject.Server.Controllers;
 [ApiController]
 [Route("api/weather")]
 [CascadingComputeController]
-public partial class WeatherController(WeatherService weatherService, TenantCacheContextProvider tenantCacheContextProvider) : ControllerBase
+public partial class WeatherController(IWeatherService weatherService, TenantContextAccessor tenantContextAccessor) : ControllerBase
 {
     [HttpGet("{cityId:int}")]
     public ActionResult<int> GetForecast(int cityId)

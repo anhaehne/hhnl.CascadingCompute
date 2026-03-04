@@ -10,6 +10,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\hhnl.CascadingCompute.AspNetCore\hhnl.CascadingCompute.AspNetCore.csproj" />
+        <ProjectReference Include="..\hhnl.CascadingCompute.DependencyInjection\hhnl.CascadingCompute.DependencyInjection.csproj" />
         <ProjectReference Include="..\hhnl.CascadingCompute.Generators\hhnl.CascadingCompute.Generators.csproj">
             <OutputItemType>Analyzer</OutputItemType>
             <ReferenceOutputAssembly>false</ReferenceOutputAssembly>

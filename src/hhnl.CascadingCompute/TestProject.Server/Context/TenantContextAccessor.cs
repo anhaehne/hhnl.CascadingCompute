@@ -1,17 +1,10 @@
+using hhnl.CascadingCompute.Shared.Interfaces;
+
 namespace TestProject.Server.Context;
 
-public interface ITenantContextAccessor
+public sealed class TenantContextAccessor(IHttpContextAccessor httpContextAccessor) : ICacheContextProvider<string>
 {
-    string TenantId { get; set; }
-}
+    public string TenantId => httpContextAccessor.HttpContext?.Request.Headers["X-Tenant-Id"].FirstOrDefault() ?? "default";
 
-public sealed class TenantContextAccessor : ITenantContextAccessor
-{
-    private static readonly AsyncLocal<string?> CurrentTenant = new();
-
-    public string TenantId
-    {
-        get => CurrentTenant.Value ?? "default";
-        set => CurrentTenant.Value = string.IsNullOrWhiteSpace(value) ? "default" : value;
-    }
+    public string GetCacheContext() => TenantId;
 }
