@@ -16,6 +16,7 @@
     <Project Path="hhnl.CascadingCompute.Tests/hhnl.CascadingCompute.Tests.csproj" Id="10033222-3b0d-4dfb-90d6-c924b07ed096" />
     <Project Path="TestProject.Client/TestProject.Client.csproj" />
     <Project Path="TestProject.Server/TestProject.Server.csproj" />
+    <Project Path="TestProject.Shared/TestProject.Shared.csproj" Id="b5207498-bb7c-4cd7-bc6a-dc1513a69bd0" />
     <Project Path="TestProject/TestProject.csproj" />
   </Folder>
   <Project Path="hhnl.CascadingCompute.DependencyInjection/hhnl.CascadingCompute.DependencyInjection.csproj" Id="cf8b037e-8db6-4ae3-b828-3d877961b2eb" />

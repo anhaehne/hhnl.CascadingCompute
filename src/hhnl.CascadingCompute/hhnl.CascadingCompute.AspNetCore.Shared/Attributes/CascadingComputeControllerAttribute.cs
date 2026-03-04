@@ -4,3 +4,9 @@
 public class CascadingComputeControllerAttribute : Attribute
 {
 }
+
+
+[AttributeUsage(AttributeTargets.Class)]
+public class CascadingComputeControllerAttribute<TService> : CascadingComputeControllerAttribute
+{
+}

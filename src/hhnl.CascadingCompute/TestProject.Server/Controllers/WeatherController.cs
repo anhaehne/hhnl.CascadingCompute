@@ -1,7 +1,7 @@
 using hhnl.CascadingCompute.AspNetCore.Shared.Attributes;
 using Microsoft.AspNetCore.Mvc;
 using TestProject.Server.Context;
-using TestProject.Server.Services;
+using TestProject.Shared.Services;
 
 namespace TestProject.Server.Controllers;
 

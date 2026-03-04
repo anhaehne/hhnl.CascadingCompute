@@ -1,13 +1,8 @@
 using hhnl.CascadingCompute.Shared.Attributes;
 using TestProject.Server.Context;
+using TestProject.Shared.Services;
 
 namespace TestProject.Server.Services;
-
-public interface IWeatherService
-{
-    int GetForecast(int cityId);
-    Task SetForecastAsync(int cityId, int value, CancellationToken cancellationToken);
-}
 
 public sealed partial class WeatherService(
     WeatherDataStore weatherDataStore,

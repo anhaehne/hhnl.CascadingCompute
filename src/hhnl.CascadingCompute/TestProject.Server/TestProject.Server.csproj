@@ -21,6 +21,7 @@
         </ProjectReference>
         <ProjectReference Include="..\hhnl.CascadingCompute\hhnl.CascadingCompute.csproj" />
         <ProjectReference Include="..\hhnl.CascadingCompute.Shared\hhnl.CascadingCompute.Shared.csproj" />
+        <ProjectReference Include="..\TestProject.Shared\TestProject.Shared.csproj" />
     </ItemGroup>
 
 </Project>

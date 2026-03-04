@@ -1,5 +1,6 @@
 using TestProject.Server.Context;
 using TestProject.Server.Services;
+using TestProject.Shared.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
