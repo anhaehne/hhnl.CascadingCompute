@@ -1,25 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <InterceptorsNamespaces>$(InterceptorsNamespaces);hhnl.CascadingCompute.Interceptors</InterceptorsNamespaces>
-    <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);hhnl.CascadingCompute.Interceptors</InterceptorsPreviewNamespaces>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <InterceptorsNamespaces>$(InterceptorsNamespaces);hhnl.CascadingCompute.Interceptors</InterceptorsNamespaces>
+        <InterceptorsPreviewNamespaces>$(InterceptorsPreviewNamespaces);hhnl.CascadingCompute.Interceptors</InterceptorsPreviewNamespaces>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\hhnl.CascadingCompute.AspNetCore\hhnl.CascadingCompute.AspNetCore.csproj" />
-    <ProjectReference Include="..\hhnl.CascadingCompute.Generators\hhnl.CascadingCompute.Generators.csproj">
-      <OutputItemType>Analyzer</OutputItemType>
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-    </ProjectReference>
-      <ProjectReference Include="..\hhnl.CascadingCompute.Generators\hhnl.CascadingCompute.AspNetCore.Generators.csproj">
-          <OutputItemType>Analyzer</OutputItemType>
-          <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      </ProjectReference>
-    <ProjectReference Include="..\hhnl.CascadingCompute\hhnl.CascadingCompute.csproj" />
-    <ProjectReference Include="..\hhnl.CascadingCompute.Shared\hhnl.CascadingCompute.Shared.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\hhnl.CascadingCompute.AspNetCore\hhnl.CascadingCompute.AspNetCore.csproj" />
+        <ProjectReference Include="..\hhnl.CascadingCompute.Generators\hhnl.CascadingCompute.Generators.csproj">
+            <OutputItemType>Analyzer</OutputItemType>
+            <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+        </ProjectReference>
+        <ProjectReference Include="..\hhnl.CascadingCompute.AspNetCore.Generators\hhnl.CascadingCompute.AspNetCore.Generators.csproj">
+            <OutputItemType>Analyzer</OutputItemType>
+            <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+        </ProjectReference>
+        <ProjectReference Include="..\hhnl.CascadingCompute\hhnl.CascadingCompute.csproj" />
+        <ProjectReference Include="..\hhnl.CascadingCompute.Shared\hhnl.CascadingCompute.Shared.csproj" />
+    </ItemGroup>
 
 </Project>
