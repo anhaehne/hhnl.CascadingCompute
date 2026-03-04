@@ -6,7 +6,7 @@ namespace TestProject.Shared.Services;
 public interface IWeatherService
 {
     [CascadingComputeGet("{cityId:int}")]
-    int GetForecast(int cityId);
+    Task<int> GetForecastAsync(int cityId, CancellationToken cancellationToken);
 
     [CascadingComputePost("{cityId:int}")]
     Task SetForecastAsync(int cityId, [CascadingComputeRouteFromBody] int value, CancellationToken cancellationToken);

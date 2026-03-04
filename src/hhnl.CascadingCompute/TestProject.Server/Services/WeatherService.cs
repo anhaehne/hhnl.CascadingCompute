@@ -9,7 +9,7 @@ public sealed partial class WeatherService(
     TenantContextAccessor tenantContextAccessor) : IWeatherService
 {
     [CascadingCompute]
-    public int GetForecast(int cityId)
+    public async Task<int> GetForecastAsync(int cityId, CancellationToken cancellationToken)
     {
         var baseValue = weatherDataStore.GetForecastBaseValue(cityId);
         return baseValue + 5;
@@ -18,6 +18,6 @@ public sealed partial class WeatherService(
     public async Task SetForecastAsync(int cityId, int value, CancellationToken cancellationToken)
     {
         weatherDataStore.SetForecast(cityId, value);
-        Invalidation.InvalidateGetForecast(cityId);
+        Invalidation.InvalidateGetForecastAsync(cityId);
     }
 }
