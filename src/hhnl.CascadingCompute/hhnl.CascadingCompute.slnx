@@ -1,10 +1,20 @@
 <Solution>
+  <Folder Name="/AspNetCore/">
+    <Project Path="hhnl.CascadingCompute.AspNetCore.Client.Generators/hhnl.CascadingCompute.AspNetCore.Client.Generators.csproj" Id="0024599b-f7c6-4b25-9cc1-db62198267e9" />
+    <Project Path="hhnl.CascadingCompute.AspNetCore.Client/hhnl.CascadingCompute.AspNetCore.Client.csproj" Id="07fd5aef-6116-4876-95a1-677cfc8c3a82" />
+    <Project Path="hhnl.CascadingCompute.AspNetCore.Generators/hhnl.CascadingCompute.AspNetCore.Generators.csproj" Id="5cd18e89-4318-4575-b776-776ec44f6174" />
+    <Project Path="hhnl.CascadingCompute.AspNetCore.Shared/hhnl.CascadingCompute.AspNetCore.Shared.csproj" Id="96ac06b5-3036-4afa-b1af-cf247547ce2a" />
+    <Project Path="hhnl.CascadingCompute.AspNetCore/hhnl.CascadingCompute.AspNetCore.csproj" Id="fdf81a5b-fa96-482f-a2cf-f7971939d8ad" />
+  </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../../README.md" />
+    <File Path="hhnl.CascadingCompute.Packaging.targets" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="hhnl.CascadingCompute.Tests.OtherAssembly/hhnl.CascadingCompute.Tests.OtherAssembly.csproj" Id="43359e8c-46d5-4597-ba54-6f3d43001c5f" />
     <Project Path="hhnl.CascadingCompute.Tests/hhnl.CascadingCompute.Tests.csproj" Id="10033222-3b0d-4dfb-90d6-c924b07ed096" />
+    <Project Path="TestProject.Client/TestProject.Client.csproj" />
+    <Project Path="TestProject.Server/TestProject.Server.csproj" />
     <Project Path="TestProject/TestProject.csproj" />
   </Folder>
   <Project Path="hhnl.CascadingCompute.DependencyInjection/hhnl.CascadingCompute.DependencyInjection.csproj" Id="cf8b037e-8db6-4ae3-b828-3d877961b2eb" />

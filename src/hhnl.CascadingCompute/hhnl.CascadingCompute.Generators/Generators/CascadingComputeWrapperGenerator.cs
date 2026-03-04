@@ -12,7 +12,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 {
     private static readonly Type[] _ignoredParameterTypes = [typeof(CancellationToken)];
     private const string AttributeMetadataName = "hhnl.CascadingCompute.Shared.Attributes.CascadingComputeAttribute";
-    private const string CacheEntryLifetimeObserverAttributeMetadataName = "hhnl.CascadingCompute.Shared.Attributes.CacheEntryLifetimeObserverAttribute";
+    private const string ICacheEntryLifetimeObserverInterfaceMetadataName = "hhnl.CascadingCompute.Shared.Interfaces.ICacheEntryLifetimeObserver";
     private const string CacheContextProviderInterfaceNamespace = "hhnl.CascadingCompute.Shared.Interfaces";
     private const string CacheContextProviderInterfaceName = "ICacheContextProvider";
     private const string IgnoreParameterAttributeMetadataName = "hhnl.CascadingCompute.Attributes.CascadingComputeIgnoreParameterAttribute";
@@ -420,6 +420,18 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
+        var primaryConstructorObservers = GetPrimaryConstructorCacheEntryLifetimeObserverParameters(typeSymbol);
+        foreach (var primaryConstructorObserver in primaryConstructorObservers)
+        {
+            sb.Append(indent);
+            sb.Append($"private global::{ICacheEntryLifetimeObserverInterfaceMetadataName} ");
+            sb.Append(primaryConstructorObserver.HelperMethodName);
+            sb.Append("() => ");
+            sb.Append(EscapeIdentifier(primaryConstructorObserver.ParameterName));
+            sb.AppendLine(";");
+            sb.AppendLine();
+        }
+
         sb.Append(indent);
         sb.Append("public class CascadingComputeWrapper(");
         sb.Append(GetContainingTypeName(typeSymbol));
@@ -471,16 +483,14 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             cacheFields.Add(fieldName);
 
             var observerFieldName = fieldName + "Observers";
-            var observerInstantiationExpressions = GetCacheEntryLifetimeObserverAttributes(method)
-                .Select(CreateAttributeInstantiationExpression)
-                .Where(static expression => expression is not null)
+            var observerInstantiationExpressions = GetCacheEntryLifetimeObserverExpressions(method)
                 .ToList();
             sb.Append(innerIndent);
-            sb.Append("private readonly global::hhnl.CascadingCompute.Shared.Attributes.CacheEntryLifetimeObserverAttribute[] ");
+            sb.Append($"private readonly global::{ICacheEntryLifetimeObserverInterfaceMetadataName}[] ");
             sb.Append(observerFieldName);
             if (observerInstantiationExpressions.Count == 0)
             {
-                sb.AppendLine(" = global::System.Array.Empty<global::hhnl.CascadingCompute.Shared.Attributes.CacheEntryLifetimeObserverAttribute>();");
+                sb.AppendLine(" = [];");
             }
             else
             {
@@ -1204,12 +1214,100 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         return false;
     }
 
+    private static IReadOnlyList<PrimaryConstructorCacheEntryLifetimeObserverParameter> GetPrimaryConstructorCacheEntryLifetimeObserverParameters(INamedTypeSymbol typeSymbol)
+    {
+        if (typeSymbol.TypeKind != TypeKind.Class)
+            return [];
+
+        var primaryConstructor = typeSymbol.InstanceConstructors
+            .FirstOrDefault(ctor => ctor.DeclaringSyntaxReferences
+                .Select(reference => reference.GetSyntax())
+                .OfType<ClassDeclarationSyntax>()
+                .Any(classDeclaration => classDeclaration.ParameterList is not null));
+
+        if (primaryConstructor is null)
+            return [];
+
+        var parameters = new List<PrimaryConstructorCacheEntryLifetimeObserverParameter>();
+        var index = 0;
+        foreach (var parameter in primaryConstructor.Parameters)
+        {
+            if (!TryGetCacheEntryLifetimeObserverType(parameter.Type, out _))
+                continue;
+
+            if (IsPrimaryConstructorParameterAssignedToObserverMember(typeSymbol, parameter))
+                continue;
+
+            parameters.Add(new PrimaryConstructorCacheEntryLifetimeObserverParameter(
+                parameter.Name,
+                $"__GetPrimaryConstructorCacheEntryLifetimeObserver{index++}"));
+        }
+
+        return parameters;
+    }
+
+    private static bool TryGetCacheEntryLifetimeObserverType(ITypeSymbol typeSymbol, out ITypeSymbol cacheEntryLifetimeObserverType)
+    {
+        if (typeSymbol is INamedTypeSymbol namedTypeSymbol)
+        {
+            if (namedTypeSymbol.ToDisplayString() == ICacheEntryLifetimeObserverInterfaceMetadataName)
+            {
+                cacheEntryLifetimeObserverType = namedTypeSymbol;
+                return true;
+            }
+
+            foreach (var interfaceSymbol in namedTypeSymbol.AllInterfaces)
+            {
+                if (interfaceSymbol.ToDisplayString() == ICacheEntryLifetimeObserverInterfaceMetadataName)
+                {
+                    cacheEntryLifetimeObserverType = interfaceSymbol;
+                    return true;
+                }
+            }
+        }
+
+        cacheEntryLifetimeObserverType = null!;
+        return false;
+    }
+
+    private static bool IsPrimaryConstructorParameterAssignedToObserverMember(INamedTypeSymbol typeSymbol, IParameterSymbol parameter)
+    {
+        foreach (var field in typeSymbol.GetMembers().OfType<IFieldSymbol>())
+        {
+            if (field.IsStatic || field.IsImplicitlyDeclared || !TryGetCacheEntryLifetimeObserverType(field.Type, out _))
+                continue;
+
+            foreach (var syntaxReference in field.DeclaringSyntaxReferences)
+            {
+                if (syntaxReference.GetSyntax() is VariableDeclaratorSyntax { Initializer.Value: IdentifierNameSyntax identifier }
+                    && string.Equals(identifier.Identifier.ValueText, parameter.Name, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+
+        foreach (var property in typeSymbol.GetMembers().OfType<IPropertySymbol>())
+        {
+            if (property.IsStatic || property.IsImplicitlyDeclared || !TryGetCacheEntryLifetimeObserverType(property.Type, out _))
+                continue;
+
+            foreach (var syntaxReference in property.DeclaringSyntaxReferences)
+            {
+                if (syntaxReference.GetSyntax() is PropertyDeclarationSyntax { Initializer.Value: IdentifierNameSyntax identifier }
+                    && string.Equals(identifier.Identifier.ValueText, parameter.Name, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool IsCacheContextProviderInterface(INamedTypeSymbol typeSymbol)
         => typeSymbol is { Name: CacheContextProviderInterfaceName, Arity: 1 }
             && typeSymbol.ContainingNamespace.ToDisplayString() == CacheContextProviderInterfaceNamespace;
 
     private sealed record CacheContextElement(string Name, string Expression, string TypeName);
     private sealed record PrimaryConstructorCacheContextParameter(string ParameterName, string ProviderTypeName, string ContextTypeName, string HelperMethodName);
+    private sealed record PrimaryConstructorCacheEntryLifetimeObserverParameter(string ParameterName, string HelperMethodName);
     private sealed record CacheContextTaint(string Key, string ValueExpression);
     private sealed record InterfacePassthroughMethod(INamedTypeSymbol InterfaceType, IMethodSymbol Method);
 
@@ -1389,6 +1487,53 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
 
     private sealed record IgnoreRule(ITypeSymbol? TypeFilter, string? NameFilter, bool HasFilter);
 
+    private static IReadOnlyList<string> GetCacheEntryLifetimeObserverExpressions(IMethodSymbol method)
+    {
+        var observerExpressions = new List<string>();
+
+        observerExpressions.AddRange(
+            GetCacheEntryLifetimeObserverAttributes(method)
+                .Select(CreateAttributeInstantiationExpression)
+                .Where(static expression => expression is not null)
+                .Select(static expression => expression!));
+
+        observerExpressions.AddRange(GetMemberCacheEntryLifetimeObserverExpressions(method));
+        observerExpressions.AddRange(GetPrimaryConstructorCacheEntryLifetimeObserverExpressions(method.ContainingType));
+
+        return observerExpressions
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static IEnumerable<string> GetMemberCacheEntryLifetimeObserverExpressions(IMethodSymbol method)
+    {
+        foreach (var member in method.ContainingType.GetMembers())
+        {
+            if (member is IFieldSymbol fieldSymbol
+                && !fieldSymbol.IsStatic
+                && !fieldSymbol.IsImplicitlyDeclared
+                && TryGetCacheEntryLifetimeObserverType(fieldSymbol.Type, out _))
+            {
+                yield return $"implementation.{EscapeIdentifier(fieldSymbol.Name)}";
+                continue;
+            }
+
+            if (member is IPropertySymbol propertySymbol
+                && !propertySymbol.IsStatic
+                && propertySymbol.GetMethod is not null
+                && TryGetCacheEntryLifetimeObserverType(propertySymbol.Type, out _))
+            {
+                yield return $"implementation.{EscapeIdentifier(propertySymbol.Name)}";
+            }
+        }
+    }
+
+    private static IEnumerable<string> GetPrimaryConstructorCacheEntryLifetimeObserverExpressions(INamedTypeSymbol typeSymbol)
+    {
+        foreach (var parameter in GetPrimaryConstructorCacheEntryLifetimeObserverParameters(typeSymbol))
+            yield return $"implementation.{parameter.HelperMethodName}()";
+    }
+
     private static IReadOnlyList<AttributeData> GetCacheEntryLifetimeObserverAttributes(IMethodSymbol method)
     {
         var attributes = new List<AttributeData>();
@@ -1414,7 +1559,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     }
 
     private static bool IsCacheEntryLifetimeObserverAttribute(AttributeData attributeData)
-        => InheritsFrom(attributeData.AttributeClass, CacheEntryLifetimeObserverAttributeMetadataName);
+        => InheritsFrom(attributeData.AttributeClass, ICacheEntryLifetimeObserverInterfaceMetadataName);
 
     private static bool InheritsFrom(INamedTypeSymbol? typeSymbol, string metadataName)
     {

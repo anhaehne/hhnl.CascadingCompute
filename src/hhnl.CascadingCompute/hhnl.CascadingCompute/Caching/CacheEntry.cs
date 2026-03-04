@@ -1,5 +1,4 @@
-﻿using hhnl.CascadingCompute.Shared.Attributes;
-using hhnl.CascadingCompute.Shared.Interfaces;
+﻿using hhnl.CascadingCompute.Shared.Interfaces;
 using System.Collections.Concurrent;
 
 namespace hhnl.CascadingCompute.Caching;
@@ -7,7 +6,7 @@ namespace hhnl.CascadingCompute.Caching;
 public class CacheEntry<TParameters, TResult>(
     TParameters parameters,
     ConcurrentDictionary<(TParameters Parameters, IReadOnlyCollection<(string Key, object Value)> Taints), CacheEntry<TParameters, TResult>> cache,
-    CacheEntryLifetimeObserverAttribute[] cacheEntryLifetimeObserverAttributes,
+    ICacheEntryLifetimeObserver[] cacheEntryLifetimeObserverAttributes,
     (string, object)[] taints) : IDependentCacheEntry, ICacheEntry<TResult>
     where TParameters : notnull
 {
@@ -18,6 +17,7 @@ public class CacheEntry<TParameters, TResult>(
 
     public IReadOnlySet<(string Key, object Value)> Taints => _taints;
 
+    public DateTimeOffset CreatedAt { get; } = DateTimeOffset.Now;
 
     public void AddDependent(IDependentCacheEntry? dependent)
     {
@@ -27,6 +27,8 @@ public class CacheEntry<TParameters, TResult>(
         _dependents.Add(new WeakReference<IDependentCacheEntry>(dependent));
         foreach (var taint in _taints)
             dependent.AddTaint(taint);
+
+        dependent.OnDependencyAdded(this);
     }
 
     public void AddTaint((string, object) taint)
@@ -53,4 +55,5 @@ public class CacheEntry<TParameters, TResult>(
             cacheEntryLifetimeObserverAttributes[i].OnCacheEntryInvalidated(this);
     }
 
+    public void OnDependencyAdded(IDependentCacheEntry dependency) { }
 }

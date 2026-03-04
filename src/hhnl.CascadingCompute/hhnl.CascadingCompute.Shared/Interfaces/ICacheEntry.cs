@@ -4,5 +4,7 @@ public interface ICacheEntry<TResult>
 {
     TResult Value { get; set; }
 
+    DateTimeOffset CreatedAt { get; }
+
     void Invalidate();
 }
