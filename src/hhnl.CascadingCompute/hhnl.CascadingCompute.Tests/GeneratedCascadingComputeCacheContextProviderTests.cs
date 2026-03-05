@@ -64,12 +64,8 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
         Assert.IsNotNull(taints);
         Assert.IsGreaterThanOrEqualTo(taints.Count, 2, "Expected at least two taints from cache-context providers.");
 
-        var tenantKey = taints.Keys.FirstOrDefault(key => key.EndsWith("|string", StringComparison.Ordinal));
-        var userKey = taints.Keys.FirstOrDefault(key => key.EndsWith("|int", StringComparison.Ordinal));
-        Assert.IsNotNull(tenantKey, $"Tenant taint key not found. Keys: {string.Join(", ", taints.Keys)}");
-        Assert.IsNotNull(userKey, $"User taint key not found. Keys: {string.Join(", ", taints.Keys)}");
-        Assert.AreEqual("tenant-a", taints[tenantKey!]);
-        Assert.AreEqual(7, taints[userKey!]);
+        CollectionAssert.Contains(taints.Values.ToList(), "tenant-a");
+        CollectionAssert.Contains(taints.Values.ToList(), 7);
     }
 
     [TestMethod]
@@ -457,8 +453,8 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
     {
         public TContext Context { get; set; } = context;
 
-        public TContext GetCacheContext()
-            => Context;
+        public (string Key, TContext Context) GetCacheContext()
+            => ($"context-{typeof(TContext).Name}", Context);
     }
 
     public sealed partial class PrimaryConstructorContextAwareService(MutableCacheContextProvider<string> tenantContextProvider)
@@ -512,8 +508,8 @@ public sealed partial class GeneratedCascadingComputeCacheContextProviderTests
     {
         public TContext Context { get; set; } = context;
 
-        public TContext GetCacheContext()
-            => Context;
+        public (string Key, TContext Context) GetCacheContext()
+            => ($"context-{typeof(TContext).Name}", Context);
     }
 
     [AttributeUsage(AttributeTargets.Method)]

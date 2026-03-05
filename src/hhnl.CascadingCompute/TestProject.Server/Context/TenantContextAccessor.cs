@@ -6,5 +6,5 @@ public sealed class TenantContextAccessor(IHttpContextAccessor httpContextAccess
 {
     public string TenantId => httpContextAccessor.HttpContext?.Request.Headers["X-Tenant-Id"].FirstOrDefault() ?? "default";
 
-    public string GetCacheContext() => TenantId;
+    public (string Key, string Context) GetCacheContext() => ("tenant", TenantId);
 }

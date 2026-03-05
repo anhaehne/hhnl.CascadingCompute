@@ -182,8 +182,9 @@ public sealed class CascadingComputeControllerGenerator : IIncrementalGenerator
         foreach (var cacheContextParameter in primaryConstructorCacheContexts)
         {
             sb.Append(indent);
-            sb.Append("private ");
+            sb.Append("private (string Key, ");
             sb.Append(cacheContextParameter.ContextTypeName);
+            sb.Append(" Context)");
             sb.Append(' ');
             sb.Append(cacheContextParameter.HelperMethodName);
             sb.Append("() => ");
@@ -509,7 +510,7 @@ public sealed class CascadingComputeControllerGenerator : IIncrementalGenerator
         if (taints.Count == 0)
             return "global::System.Array.Empty<(string Key, object Value)>()";
 
-        var entries = taints.Select(taint => $"(\"{EscapeStringLiteral(taint.Key)}\", (object){taint.ValueExpression}!)");
+        var entries = taints.Select(taint => $"((string){taint.KeyExpression}, (object){taint.ValueExpression}!)");
         return $"new (string Key, object Value)[] {{ {string.Join(", ", entries)} }}";
     }
 
@@ -522,9 +523,10 @@ public sealed class CascadingComputeControllerGenerator : IIncrementalGenerator
                 && !fieldSymbol.IsImplicitlyDeclared
                 && TryGetCacheContextType(fieldSymbol.Type, out var fieldContextType))
             {
+                var cacheContextExpression = $"{EscapeIdentifier(fieldSymbol.Name)}.GetCacheContext()";
                 yield return new CacheContextTaint(
-                    GetCacheContextTaintKey(fieldSymbol.Type, fieldContextType),
-                    $"{EscapeIdentifier(fieldSymbol.Name)}.GetCacheContext()");
+                    $"{cacheContextExpression}.Key",
+                    $"{cacheContextExpression}.Context");
                 continue;
             }
 
@@ -533,17 +535,18 @@ public sealed class CascadingComputeControllerGenerator : IIncrementalGenerator
                 && propertySymbol.GetMethod is not null
                 && TryGetCacheContextType(propertySymbol.Type, out var propertyContextType))
             {
+                var cacheContextExpression = $"{EscapeIdentifier(propertySymbol.Name)}.GetCacheContext()";
                 yield return new CacheContextTaint(
-                    GetCacheContextTaintKey(propertySymbol.Type, propertyContextType),
-                    $"{EscapeIdentifier(propertySymbol.Name)}.GetCacheContext()");
+                    $"{cacheContextExpression}.Key",
+                    $"{cacheContextExpression}.Context");
             }
         }
 
         foreach (var primaryConstructorCacheContext in GetPrimaryConstructorCacheContextParameters(controller))
         {
             yield return new CacheContextTaint(
-                GetCacheContextTaintKey(primaryConstructorCacheContext.ProviderTypeName, primaryConstructorCacheContext.ContextTypeName),
-                $"{primaryConstructorCacheContext.HelperMethodName}()");
+                $"{primaryConstructorCacheContext.HelperMethodName}().Key",
+                $"{primaryConstructorCacheContext.HelperMethodName}().Context");
         }
     }
 
@@ -642,13 +645,13 @@ public sealed class CascadingComputeControllerGenerator : IIncrementalGenerator
 
     private sealed class CacheContextTaint
     {
-        public CacheContextTaint(string key, string valueExpression)
+        public CacheContextTaint(string keyExpression, string valueExpression)
         {
-            Key = key;
+            KeyExpression = keyExpression;
             ValueExpression = valueExpression;
         }
 
-        public string Key { get; }
+        public string KeyExpression { get; }
         public string ValueExpression { get; }
     }
 

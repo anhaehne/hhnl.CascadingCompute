@@ -410,8 +410,9 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         foreach (var primaryConstructorCacheContext in primaryConstructorCacheContexts)
         {
             sb.Append(indent);
-            sb.Append("private ");
+            sb.Append("private (string Key, ");
             sb.Append(primaryConstructorCacheContext.ContextTypeName);
+            sb.Append(" Context)");
             sb.Append(' ');
             sb.Append(primaryConstructorCacheContext.HelperMethodName);
             sb.Append("() => ");
@@ -872,7 +873,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             return "global::System.Array.Empty<(string Key, object Value)>()";
 
         var elements = taints.Select(taint =>
-            $"(\"{EscapeStringLiteral(taint.Key)}\", (object){taint.ValueExpression}!)");
+            $"((string){taint.KeyExpression}, (object){taint.ValueExpression}!)");
         return $"[{string.Join(", ", elements)}]";
     }
 
@@ -885,9 +886,10 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
                 && !fieldSymbol.IsImplicitlyDeclared
                 && TryGetCacheContextType(fieldSymbol.Type, out var fieldContextType))
             {
+                var cacheContextExpression = $"implementation.{EscapeIdentifier(fieldSymbol.Name)}.GetCacheContext()";
                 yield return new CacheContextTaint(
-                    GetCacheContextTaintKey(fieldSymbol.Type, fieldContextType),
-                    $"implementation.{EscapeIdentifier(fieldSymbol.Name)}.GetCacheContext()");
+                    $"{cacheContextExpression}.Key",
+                    $"{cacheContextExpression}.Context");
                 continue;
             }
 
@@ -896,17 +898,18 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
                 && propertySymbol.GetMethod is not null
                 && TryGetCacheContextType(propertySymbol.Type, out var propertyContextType))
             {
+                var cacheContextExpression = $"implementation.{EscapeIdentifier(propertySymbol.Name)}.GetCacheContext()";
                 yield return new CacheContextTaint(
-                    GetCacheContextTaintKey(propertySymbol.Type, propertyContextType),
-                    $"implementation.{EscapeIdentifier(propertySymbol.Name)}.GetCacheContext()");
+                    $"{cacheContextExpression}.Key",
+                    $"{cacheContextExpression}.Context");
             }
         }
 
         foreach (var primaryConstructorCacheContext in GetPrimaryConstructorCacheContextParameters(method.ContainingType))
         {
             yield return new CacheContextTaint(
-                GetCacheContextTaintKey(primaryConstructorCacheContext.ProviderTypeName, primaryConstructorCacheContext.ContextTypeName),
-                $"implementation.{primaryConstructorCacheContext.HelperMethodName}()");
+                $"implementation.{primaryConstructorCacheContext.HelperMethodName}().Key",
+                $"implementation.{primaryConstructorCacheContext.HelperMethodName}().Context");
         }
     }
 
@@ -1097,7 +1100,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             {
                 elements.Add(new CacheContextElement(
                     $"cacheContext{index++}",
-                    $"implementation.{EscapeIdentifier(fieldSymbol.Name)}.GetCacheContext()",
+                    $"implementation.{EscapeIdentifier(fieldSymbol.Name)}.GetCacheContext().Context",
                     fieldContextType.ToDisplayString(NullableFullyQualifiedFormat)));
                 continue;
             }
@@ -1109,7 +1112,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
             {
                 elements.Add(new CacheContextElement(
                     $"cacheContext{index++}",
-                    $"implementation.{EscapeIdentifier(propertySymbol.Name)}.GetCacheContext()",
+                    $"implementation.{EscapeIdentifier(propertySymbol.Name)}.GetCacheContext().Context",
                     propertyContextType.ToDisplayString(NullableFullyQualifiedFormat)));
             }
         }
@@ -1118,7 +1121,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
         {
             elements.Add(new CacheContextElement(
                 $"cacheContext{index++}",
-                $"implementation.{primaryConstructorCacheContext.HelperMethodName}()",
+                $"implementation.{primaryConstructorCacheContext.HelperMethodName}().Context",
                 primaryConstructorCacheContext.ContextTypeName));
         }
 
@@ -1308,7 +1311,7 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     private sealed record CacheContextElement(string Name, string Expression, string TypeName);
     private sealed record PrimaryConstructorCacheContextParameter(string ParameterName, string ProviderTypeName, string ContextTypeName, string HelperMethodName);
     private sealed record PrimaryConstructorCacheEntryLifetimeObserverParameter(string ParameterName, string HelperMethodName);
-    private sealed record CacheContextTaint(string Key, string ValueExpression);
+    private sealed record CacheContextTaint(string KeyExpression, string ValueExpression);
     private sealed record InterfacePassthroughMethod(INamedTypeSymbol InterfaceType, IMethodSymbol Method);
 
     private static IReadOnlyList<IParameterSymbol> GetIncludedParameters(IMethodSymbol method)
@@ -1559,7 +1562,19 @@ public sealed class CascadingComputeWrapperGenerator : IIncrementalGenerator
     }
 
     private static bool IsCacheEntryLifetimeObserverAttribute(AttributeData attributeData)
-        => InheritsFrom(attributeData.AttributeClass, ICacheEntryLifetimeObserverInterfaceMetadataName);
+    {
+        var attributeClass = attributeData.AttributeClass;
+        if (attributeClass is null)
+            return false;
+
+        if (attributeClass.ToDisplayString() == ICacheEntryLifetimeObserverInterfaceMetadataName)
+            return true;
+
+        if (attributeClass.AllInterfaces.Any(interfaceType => interfaceType.ToDisplayString() == ICacheEntryLifetimeObserverInterfaceMetadataName))
+            return true;
+
+        return InheritsFrom(attributeClass, ICacheEntryLifetimeObserverInterfaceMetadataName);
+    }
 
     private static bool InheritsFrom(INamedTypeSymbol? typeSymbol, string metadataName)
     {

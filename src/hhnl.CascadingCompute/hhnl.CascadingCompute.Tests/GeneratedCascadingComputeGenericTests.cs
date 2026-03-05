@@ -266,7 +266,7 @@ public sealed partial class GeneratedCascadingComputeGenericTests
     {
         public TContext Context { get; set; } = context;
 
-        public TContext GetCacheContext()
-            => Context;
+        public (string Key, TContext Context) GetCacheContext()
+            => ($"context-{typeof(TContext).Name}", Context);
     }
 }

@@ -43,7 +43,7 @@ public partial class CascadingComputeActionFilterTests
         // Assert 1
         Assert.IsNotNull(observedTaints);
         Assert.HasCount(1, observedTaints);
-        StringAssert.EndsWith(observedTaints.First().Key, "TestTenantCacheContextProvider|string");
+        Assert.AreEqual("tenant", observedTaints.First().Key);
         Assert.AreEqual("tenant-a", observedTaints.First().Value);
 
         // Assert 2
@@ -214,7 +214,7 @@ public partial class CascadingComputeActionFilterTests
             // Assert 2
             Assert.IsNotNull(observedInvalidation);
             Assert.AreEqual("/api/weather/10", observedInvalidation.Value.url);
-            StringAssert.EndsWith(observedInvalidation.Value.taints.First().Key, "TestTenantCacheContextProvider|string");
+            Assert.AreEqual("tenant", observedInvalidation.Value.taints.First().Key);
             Assert.AreEqual("tenant-a", observedInvalidation.Value.taints.First().Value);
 
             // Assert 3
@@ -246,7 +246,7 @@ public partial class CascadingComputeActionFilterTests
         await Task.Delay(100, cancellationTokenSource.Token);
         TestController.OnCacheEntryInvalidated(
             "/api/weather/10",
-            [("global::hhnl.CascadingCompute.AspNetCore.Tests.CascadingComputeActionFilterTests.TestTenantCacheContextProvider|string", "tenant-a")]);
+            [("tenant", "tenant-a")]);
 
         // Act 3
         await Task.Delay(200, cancellationTokenSource.Token);
@@ -343,6 +343,6 @@ public partial class CascadingComputeActionFilterTests
 
     private sealed class TestTenantCacheContextProvider : ICacheContextProvider<string>
     {
-        public string GetCacheContext() => TestController.CurrentTenant;
+        public (string Key, string Context) GetCacheContext() => ("tenant", TestController.CurrentTenant);
     }
 }

@@ -6,5 +6,5 @@
 /// </summary>
 public interface ICacheContextProvider<TContext>
 {
-    TContext GetCacheContext();
+    (string Key, TContext Context) GetCacheContext();
 }

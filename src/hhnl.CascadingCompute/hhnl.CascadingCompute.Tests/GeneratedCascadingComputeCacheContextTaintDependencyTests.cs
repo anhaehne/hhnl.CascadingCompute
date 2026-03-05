@@ -82,7 +82,7 @@ public sealed partial class GeneratedCascadingComputeCacheContextTaintDependency
     {
         public long UserId { get; set; }
 
-        public long GetCacheContext() => UserId;
+        public (string Key, long Context) GetCacheContext() => ("user", UserId);
     }
 
     public partial interface IServiceInner

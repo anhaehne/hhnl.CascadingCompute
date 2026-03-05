@@ -78,5 +78,5 @@ public class UserContext : ICacheContextProvider<long>
 {
     public long UserId { get; set; }
 
-    public long GetCacheContext() => UserId;
+    public (string Key, long Context) GetCacheContext() => ("user", UserId);
 }
