@@ -8,4 +8,5 @@
         <IsPackable>true</IsPackable>
     </PropertyGroup>
 
+    <Import Project="..\hhnl.CascadingCompute.Packaging.targets" />
 </Project>
