@@ -20,7 +20,6 @@ public class ValueCache<TService, TParameters, TResult>
         (string Key, object Value)[] taints)
     {
         var parentEntry = CacheDependencyContext.CurrentEntry.Value;
-        var parentTaints = CacheDependencyContext.CurrentTaints.Value;
         var tolerations = GetTolarations(taints);
 
         if (_entries.TryGetValue((parameters, tolerations), out var entry))
@@ -127,9 +126,9 @@ public class ValueCache<TService, TParameters, TResult>
         public int GetHashCode((TParameters Parameters, IReadOnlyCollection<(string Key, object Value)> Taints) obj)
         {
             int hash = EqualityComparer<TParameters>.Default.GetHashCode(obj.Parameters);
-            foreach (var taint in obj.Taints)
+            foreach (var (key, value) in obj.Taints)
             {
-                hash = HashCode.Combine(hash, taint.Key.GetHashCode(), taint.Value?.GetHashCode() ?? 0);
+                hash = HashCode.Combine(hash, key.GetHashCode(), value?.GetHashCode() ?? 0);
             }
             return hash;
         }

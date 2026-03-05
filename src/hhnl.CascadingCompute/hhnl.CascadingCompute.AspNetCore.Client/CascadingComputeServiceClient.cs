@@ -9,7 +9,7 @@ namespace hhnl.CascadingCompute.AspNetCore.Client;
 public abstract class CascadingComputeServiceClient<TService>(HttpClient httpClient) : IDisposable
     where TService : class
 {
-    private ConcurrentDictionary<string, ConcurrentBag<IDependentCacheEntry>> _cacheEntries = new();
+    private readonly ConcurrentDictionary<string, ConcurrentBag<IDependentCacheEntry>> _cacheEntries = new();
 
     CancellationTokenSource? _invalidationCts;
 

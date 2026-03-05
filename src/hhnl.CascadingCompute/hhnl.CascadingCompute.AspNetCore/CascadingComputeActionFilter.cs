@@ -9,7 +9,7 @@ namespace hhnl.CascadingCompute.AspNetCore;
 public class CascadingComputeActionFilter<TController>() : IAsyncActionFilter
     where TController : ControllerBase, ICascadingComputeController
 {
-    private static ConcurrentDictionary<Entry, object?> _entries = new(new Entry.CacheKeyEqualityComparer());
+    private readonly static ConcurrentDictionary<Entry, object?> _entries = new(new Entry.CacheKeyEqualityComparer());
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
@@ -31,7 +31,7 @@ public class CascadingComputeActionFilter<TController>() : IAsyncActionFilter
 
     private class Entry(string url, ConcurrentDictionary<Entry, object?> entries) : IDependentCacheEntry
     {
-        private EquatableSet<(string, object)> _taints = new();
+        private readonly EquatableSet<(string, object)> _taints = [];
 
         public string Url { get; } = url;
 

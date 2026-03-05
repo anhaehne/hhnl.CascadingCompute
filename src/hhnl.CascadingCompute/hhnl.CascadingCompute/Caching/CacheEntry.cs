@@ -10,8 +10,8 @@ public class CacheEntry<TParameters, TResult>(
     (string, object)[] taints) : IDependentCacheEntry, ICacheEntry<TResult>
     where TParameters : notnull
 {
-    private List<WeakReference<IDependentCacheEntry>> _dependents = [];
-    private EquatableSet<(string, object)> _taints = new(taints);
+    private readonly List<WeakReference<IDependentCacheEntry>> _dependents = [];
+    private readonly EquatableSet<(string, object)> _taints = [.. taints];
 
     public TResult Value { get; set; } = default!;
 
